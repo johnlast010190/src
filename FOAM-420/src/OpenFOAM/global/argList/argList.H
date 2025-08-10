@@ -1,0 +1,483 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2017 OpenFOAM Foundation
+    (c) 2016-2019 OpenCFD Ltd.
+    (c) 2022 Esi Ltd.
+
+Class
+    Foam::argList
+
+Description
+    Extract command arguments and options from the supplied
+    \a argc and \a argv parameters.
+
+    Sequences with "(" ... ")" are transformed into a stringList.
+    For example,
+    \verbatim
+        program -listFiles \( *.txt \)
+    \endverbatim
+    would create a stringList:
+    \verbatim
+        ( "file1.txt" "file2.txt" ... "fileN.txt" )
+    \endverbatim
+    The backslash-escaping is required to avoid interpretation by the shell.
+
+    Default command-line options:
+      - \par -case \<dir\>
+        Select a case directory instead of the current working directory
+      - \par -decomposeParDict \<file\>
+        Read decomposePar dictionary from specified location
+      - \par -parallel
+        Specify case as a parallel job
+      - \par -doc
+        Display the documentation in browser
+      - \par -srcDoc
+        Display the source documentation in browser
+      - \par -help
+        Print the usage
+
+    Additionally, the \b -noFunctionObjects and \b -postProcess options
+    may be present for some solvers or utilities.
+
+    Environment variables set by argList or by Time:
+      - \par FOAM_CASE
+        The path of the global case.
+        It is the same for serial and parallel jobs.
+      - \par FOAM_CASENAME
+        The name of the global case.
+      - \par FOAM_EXECUTABLE
+        If not already present in the calling environment,
+        it is set to the \a name portion of the calling executable.
+      - \par FOAM_APPLICATION
+        If not already present in the calling environment,
+        it is set to the value of the \c application entry
+        (from \c controlDict) if that entry is present.
+
+    The value of the \b FOAM_APPLICATION may be inconsistent if the value of
+    the \c application entry is adjusted during runtime.
+
+Note
+    - The document browser used is defined by the \b FOAM_DOC_BROWSER
+      environment variable or the <tt>Documentation/docBrowser</tt> entry
+      in the <tt>~OpenFOAM/controlDict</tt> file.
+      The \%f token is used as a placeholder for the file name.
+    - The valid (mandatory) arguments can be adjusted
+      by directly manipulating the argList::validArgs static member.
+    - The valid options can be adjusted
+      via the addOption/removeOption static methods instead of directly
+      manipulating the argList::validOptions static member.
+
+SourceFiles
+    argList.C
+    argListI.H
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef argList_H
+#define argList_H
+
+#include "primitives/strings/lists/stringList.H"
+#include "containers/Lists/SubList/SubList.H"
+#include "containers/LinkedLists/user/SLList.H"
+#include "containers/HashTables/HashTable/HashTable.H"
+#include "primitives/strings/word/word.H"
+#include "primitives/strings/fileName/fileName.H"
+#include "global/argList/parRun.H"
+#include "db/IOstreams/StringStreams/IStringStream.H"
+#include "include/OSspecific.H"
+
+#if defined( WIN32 ) || defined( WIN64 )
+#include "signals/sigFpe.H"
+#include "signals/sigInt.H"
+#include "signals/sigQuit.H"
+#include "signals/sigSegv.H"
+#endif
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+
+/*---------------------------------------------------------------------------*\
+                           Class argList Declaration
+\*---------------------------------------------------------------------------*/
+
+class argList
+{
+    // Private data
+
+        //- Track enabled/disabled banner state
+        static bool bannerEnabled_;
+
+        //- Track enabled/disabled checking of processor directories state
+        static bool checkProcessorDirectories_;
+
+        //- Switch on/off parallel mode. Has to be first to be constructed
+        //  so destructor is done last.
+        ParRunControl parRunControl_;
+
+        stringList args_;
+        HashTable<string> options_;
+
+        word executable_;
+        fileName rootPath_;
+        bool distributed_;
+        fileName globalCase_;
+        fileName case_;
+        string argListStr_;
+
+        #if defined( WIN32 ) || defined( WIN64 )
+            // Signal handlers
+            sigFpe sigFpe_;
+            sigInt sigInt_;
+            sigQuit sigQuit_;
+            sigSegv sigSegv_;
+        #endif
+
+    // Private Member Functions
+
+        //- Helper function for printUsage
+        static void printOptionUsage
+        (
+            const label location,
+            const string& str
+        );
+
+        //- Get rootPath_ / globalCase_ from one of the following forms
+        //   * [-case dir]
+        //   * cwd
+        //
+        // Also export FOAM_CASE and FOAM_CASENAME environment variables
+        // so they can be used immediately (eg, in decomposeParDict), as well
+        // as the FOAM_EXECUTABLE environment.
+        void getRootCase();
+
+        //- Transcribe argv into internal args_.
+        //  Transform sequences with "(" ... ")" into string lists
+        //  return true if any "(" ... ")" sequences were captured
+        bool regroupArgv(int& argc, char**& argv);
+
+        //- Check after reading if the input token stream has unconsumed
+        //- tokens remaining or if there were no tokens in the first place.
+        //  Emits Warning
+        static void checkITstream(const ITstream& is, const word& optName);
+
+
+
+public:
+
+    // Static data members
+
+        //- A list of valid (mandatory) arguments
+        static SLList<string> validArgs;
+
+        //- A list of valid options
+        static HashTable<string> validOptions;
+
+        //- A list of valid parallel options
+        static HashTable<string> validParOptions;
+
+        //- Short usage information for validOptions
+        static HashTable<string> optionUsage;
+
+        //- Additional notes for usage
+        static SLList<string> notes;
+
+        //- Min offset for displaying usage (default: 20)
+        static string::size_type usageMin;
+
+        //- Max screen width for displaying usage (default: 80)
+        static string::size_type usageMax;
+
+        //- Standard name for the post-processing option
+        static word postProcessOptionName;
+
+        //! \cond internalClass
+        class initValidTables
+        {
+        public:
+
+            initValidTables();
+        };
+        //! \endcond
+
+
+    // Constructors
+
+        //- Construct from argc and argv
+        //  checking the arguments and options as requested
+        argList
+        (
+            int& argc,
+            char**& argv,
+            bool checkArgs = true,
+            bool checkOpts = true,
+            bool initialise = true,
+            bool appNeedsThread = false
+        );
+
+        //- Construct copy with new options
+        argList
+        (
+            const argList& args,
+            const HashTable<string>& options,
+            bool checkArgs = true,
+            bool checkOpts = true,
+            bool initialise = true
+        );
+
+
+    //- Destructor
+    virtual ~argList();
+
+
+    // Member functions
+
+        //- Parse
+        void parse
+        (
+            bool checkArgs,
+            bool checkOpts,
+            bool initialise
+        );
+
+
+        // Access
+
+            //- Name of executable without the path
+            inline const word& executable() const;
+
+            //- Return root path
+            inline const fileName& rootPath() const;
+
+            //- Return distributed flag (i.e. are rootPaths different on
+            //  different machines)
+            inline bool distributed() const;
+
+            //- Return case name (parallel run) or global case (serial run)
+            inline const fileName& caseName() const;
+
+            //- Return case name
+            inline const fileName& globalCaseName() const;
+
+            //- Return parRunControl
+            inline const ParRunControl& parRunControl() const;
+
+            //- Return the path to the caseName
+            inline fileName path() const;
+
+            //- Return arguments
+            inline const stringList& args() const;
+
+            //- Return non-const access to arguments
+            inline stringList& args();
+
+            //- Return the argument corresponding to index.
+            inline const string& arg(const label index) const;
+
+            //- Return the number of arguments
+            inline label size() const;
+
+            //- Read a value from the argument at index.
+            //  Index 0 corresponds to the name of the executable.
+            //  Index 1 corresponds to the first argument.
+            template<class T>
+            inline T argRead(const label index) const;
+
+            //- Return options
+            inline const Foam::HashTable<string>& options() const;
+
+            //- Return non-const access to options
+            inline Foam::HashTable<string>& options();
+
+            //- Return the argument string associated with the named option
+            inline const string& option(const word& opt) const;
+
+            //- Return true if the named option is found
+            inline bool optionFound(const word& opt) const;
+
+            //- Return an IStringStream from the named option
+            inline IStringStream optionLookup(const word& opt) const;
+
+            //- Read a value from the named option
+            template<class T>
+            inline T optionRead(const word& opt) const;
+
+            //- Read a value from the named option if present.
+            //  Return true if the named option was found.
+            template<class T>
+            inline bool optionReadIfPresent(const word& opt, T&) const;
+
+            //- Read a value from the named option if present.
+            //  Return true if the named option was found, otherwise
+            //  use the supplied default and return false.
+            template<class T>
+            inline bool optionReadIfPresent
+            (
+                const word& opt,
+                T&,
+                const T& deflt
+            ) const;
+
+            //- Read a value from the named option if present.
+            //  Return supplied default otherwise.
+            template<class T>
+            inline T optionLookupOrDefault
+            (
+                const word& opt,
+                const T& deflt
+            ) const;
+
+            //- Read a List of values from the named option
+            template<class T>
+            List<T> optionReadList(const word& opt) const
+            {
+                return readList<T>(optionLookup(opt)());
+            }
+
+            //- If named option is present, get a List of values
+            //- treating a single entry like a list of size 1.
+            //  \return true if the named option was found.
+            template<class T>
+            inline bool readListIfPresent(const word& optName, List<T>& list) const;
+
+
+            //- Return the argument corresponding to index.
+            //  Index 0 corresponds to the name of the executable.
+            //  Index 1 corresponds to the first argument.
+            inline const string& operator[](const label index) const;
+
+            //- Return the argument string associated with the named option
+            //  \sa option()
+            inline const string& operator[](const word& opt) const;
+
+
+        // Edit
+
+            //- Add to a bool option to validOptions with usage information
+            static void addBoolOption
+            (
+                const word& opt,
+                const string& usage = ""
+            );
+
+            //- Add to an option to validOptions with usage information
+            //  An option with an empty param is a bool option
+            static void addOption
+            (
+                const word& opt,
+                const string& param = "",
+                const string& usage = ""
+            );
+
+            //- Add option usage information to optionUsage
+            static void addUsage
+            (
+                const word& opt,
+                const string& usage
+            );
+
+            //- Add extra notes for the usage information
+            //  This string is used "as-is" without additional formatting
+            static void addNote(const string&);
+
+            //- Remove option from validOptions and from optionUsage
+            static void removeOption(const word& opt);
+
+            //- Disable emitting the banner information
+            static void noBanner();
+
+            //- Banner status (enabled/disabled)
+            static bool bannerEnabled();
+
+            //- Remove the 'noFunctionObjects' option,
+            //  optionally adding a 'withFunctionObjects' option instead
+            static void noFunctionObjects(bool addWithOption = false);
+
+            //- Suppress JobInfo, overriding controlDict setting
+            static void noJobInfo();
+
+            //- Remove the parallel options
+            static void noParallel();
+
+            //- Remove checking of processor directories
+            static void noCheckProcessorDirectories();
+
+            //- Return true if the post-processing option is specified
+            static bool postProcess(int argc, char *argv[]);
+
+            //- Return true if there are arguments
+            static bool hasArgs(int argc, char *argv[]);
+
+            //- Set option directly (use with caution)
+            //  An option with an empty param is a bool option.
+            //  Not all valid options can also be set: eg, -case, -roots, ...
+            //  Return true if the existing option value needed changing,
+            //  or if the option did not previously exist.
+            bool setOption(const word& opt, const string& param = "");
+
+            //- Unset option directly (use with caution)
+            //  Not all valid options can also be unset: eg, -case, -roots ...
+            //  Return true if the option existed before being unset.
+            bool unsetOption(const word& opt);
+
+
+        // Print
+
+            //- Print notes (if any)
+            void printNotes() const;
+
+            //- Print usage
+            void printUsage() const;
+
+            //- Display documentation in browser
+            //  Optionally display the application source code
+            void displayDoc(bool source=false) const;
+
+
+        // Check
+
+            //- Check argument list
+            bool check(bool checkArgs=true, bool checkOpts=true) const;
+
+            //- Check root path and case path
+            bool checkRootCase() const;
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#include "global/argList/argListI.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

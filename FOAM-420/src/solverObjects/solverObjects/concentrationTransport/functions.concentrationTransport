@@ -1,0 +1,61 @@
+    CO2
+    {
+        type            concentrationTransport;
+        functionObjectLibs ( "libsolverFunctionObjects.so" );
+        region          region0;
+
+        fieldName       Yco2;
+        phiName         phi; //optional
+        Dt Dt;
+        D  Dco2;
+        
+
+        solverOptions
+        {
+            ddtScheme Euler;
+            divScheme Gauss upwind;
+        }
+
+        regions //any cell topo source - defines volumetric sources
+        (
+            /*
+            boxToCell
+            {
+                box (-1000 -1000 -1000) (1000 1000 1000);
+
+                //fixedValue 1;   //fixes cell value - optional - no default
+                fixedSource 1;  //Su source value - optional - no default
+                //linearSource 4; //SuSp source value - optional - no default
+            }*/
+        );
+
+        //defines initial value and boundary conditions. Will preferencially
+        //read field from file at startup
+        fieldDefinition
+        {
+            type scalar; //vector, tensor, sphericlTensor, symmetricTensor
+            dimensions [ 0 0 0 0 0 0 0 ];
+            internalField uniform 0.00051;
+
+            boundaryTypeDefaults
+            {
+
+                walls {type zeroGradient;}
+
+                outlets {type inletOutlet; inletValue uniform 0.00051; value uniform 0.00051;}
+
+                inlets {type inletOutlet; inletValue uniform 0.00051; value uniform 0.00051;}
+            }
+            boundaryConditions
+            {
+                "human_Sphere.*"
+                {
+                    type groupOfHumansCO2;
+                    value uniform 0.00051;
+                    D Dco2;
+                    Dt Dt;
+                }
+            }
+        }
+    }
+

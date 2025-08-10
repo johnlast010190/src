@@ -1,0 +1,214 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2016 OpenFOAM Foundation
+
+Class
+    Foam::cellLooper
+
+Description
+    Abstract base class. Concrete implementations know how to cut a cell
+    (i.e. determine a loop around the circumference).
+
+    Loop around the cell is given as the vertices to be cut and edges to
+    be cut (and a weight between 0 and 1 giving where the cut is to be
+    made). Main routine is 'cut' which gets called for every cell and
+    gets the current cut situation and expects to return a loop on the
+    cell circumference.
+
+    Calling function needs to determine whether cellLooper is compatible with
+    existing set of cuts.
+
+    Also contains various utility functions which implementations might want to
+    use.
+
+SourceFiles
+    cellLooper.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef cellLooper_H
+#define cellLooper_H
+
+#include "meshCut/edgeVertex/edgeVertex.H"
+#include "primitives/Vector/vector/vector.H"
+#include "primitives/bools/lists/boolList.H"
+#include "fields/Fields/scalarField/scalarField.H"
+#include "containers/Lists/DynamicList/DynamicList.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+
+// Forward declaration of classes
+class polyMesh;
+class plane;
+
+/*---------------------------------------------------------------------------*\
+                           Class cellLooper Declaration
+\*---------------------------------------------------------------------------*/
+
+class cellLooper
+:
+    public edgeVertex
+{
+
+protected:
+
+    // Protected Member Functions
+
+        //- Get faces (on cell) connected to vertI which are not using edgeI
+        labelList getVertFacesNonEdge
+        (
+            const label celli,
+            const label edgeI,
+            const label vertI
+        ) const;
+
+        //- Get first edge connected to vertI and on facei
+        label getFirstVertEdge
+        (
+            const label facei,
+            const label vertI
+        ) const;
+
+        //- Get edges (on cell) connected to vertI which are not on facei
+        labelList getVertEdgesNonFace
+        (
+            const label celli,
+            const label facei,
+            const label vertI
+        ) const;
+
+        //- Return edge from cellEdges that is most perpendicular
+        //  to refinement direction.
+        label getMisAlignedEdge(const vector& refDir, const label celli) const;
+
+
+private:
+
+    // Private Member Functions
+
+        //- Disallow default bitwise copy construct
+        cellLooper(const cellLooper&);
+
+        //- Disallow default bitwise assignment
+        void operator=(const cellLooper&);
+
+
+public:
+
+    //- Runtime type information
+    TypeName("cellLooper");
+
+
+    // Declare run-time constructor selection table
+
+        // For the direct constructor
+        declareRunTimeSelectionTable
+        (
+            autoPtr,
+            cellLooper,
+            word,
+            (
+                const polyMesh& mesh
+            ),
+            (mesh)
+        );
+
+
+    // Constructors
+
+        //- Construct from components
+        cellLooper(const polyMesh& mesh);
+
+        //- Clone
+        autoPtr<cellLooper> clone() const
+        {
+            NotImplemented;
+        }
+
+
+    // Selectors
+
+        //- Return a reference to the selected cellLooper
+        static autoPtr<cellLooper> New
+        (
+            const word& type,
+            const polyMesh& mesh
+        );
+
+
+    //- Destructor
+    virtual ~cellLooper();
+
+
+    // Member Functions
+
+        //- Create cut along circumference of celli. Gets current mesh cuts
+        //  vertIsCut, edgeIsCut, edgeWeight).
+        //  Cut along circumference is expressed as cellVertCut,
+        //  cellEdgeToWeight. Returns true if succesfull. Still might not
+        //  be compatible with existing cuts but this should be handled by
+        //  caller).
+        virtual bool cut
+        (
+            const vector& refDir,
+            const label celli,
+            const boolList& vertIsCut,
+            const boolList& edgeIsCut,
+            const scalarField& edgeWeight,
+
+            labelList& loop,
+            scalarField& loopWeights
+        ) const = 0;
+
+        //- Same but now also base point of cut provided (instead of always
+        //  cell centre)
+        virtual bool cut
+        (
+            const plane& cutPlane,
+            const label celli,
+            const boolList& vertIsCut,
+            const boolList& edgeIsCut,
+            const scalarField& edgeWeight,
+
+            labelList& loop,
+            scalarField& loopWeights
+        ) const = 0;
+
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

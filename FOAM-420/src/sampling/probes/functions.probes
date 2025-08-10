@@ -1,0 +1,17 @@
+volProbes
+{
+    type probes;
+    functionObjectLibs ( "libsampling.so" );
+
+    region region0;
+
+    probeLocations
+    (
+        (0 0 0)
+    );
+
+    fields
+    (
+        p
+    );
+}

@@ -1,0 +1,126 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) Creative Fields, Ltd.
+
+Authors
+    Franjo Juretic (franjo.juretic@c-fields.com)
+
+Class
+    topologicalCleaner
+
+Description
+    Checks cells for invalid topologies. Decomposes bad cells into pyramids
+
+SourceFiles
+    topologicalCleaner.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef topologicalCleaner_H
+#define topologicalCleaner_H
+
+#include "utilities/meshes/polyMeshGenModifier/polyMeshGenModifier.H"
+#include "primitives/bools/lists/boolList.H"
+#include "containers/HashTables/HashSet/HashSet.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+
+/*---------------------------------------------------------------------------*\
+                           Class topologicalCleaner Declaration
+\*---------------------------------------------------------------------------*/
+
+class topologicalCleaner
+{
+    // Private data
+        polyMeshGen& mesh_;
+
+        bool changed_;
+
+        boolList decomposeCell_;
+
+    // Private member functions
+
+        //- check and fix incorrectly connected faces
+        void checkNonConsecutiveBoundaryVertices();
+
+        //- check and fix non-mappable faces
+        void checkNonMappableFaces();
+
+        //- check and fix non-mappable cells
+        void checkNonMappableCells();
+
+        //- decompose marked cells
+        void decomposeCells();
+
+        //- Disallow default bitwise copy construct
+        topologicalCleaner(const topologicalCleaner&);
+
+        //- Disallow default bitwise assignment
+        void operator=(const topologicalCleaner&);
+
+public:
+
+    // Constructors
+
+        //- Construct from polyMeshGen
+        topologicalCleaner(polyMeshGen& mesh);
+
+
+    // Destructor
+
+        ~topologicalCleaner();
+
+
+    // Member Functions
+        //- clean topologically problematic cells
+        bool cleanTopology();
+
+        //- check and fix vertices where two or more groups of cells meet
+        void checkInvalidConnectionsForVerticesCells
+        (
+            labelHashSet* irregularNodes = nullptr
+        );
+
+        //- check and fix vertices where two or more groups of faces meet
+        void checkInvalidConnectionsForVerticesFaces
+        (
+            labelHashSet* irregularNodes = nullptr
+        );
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

@@ -1,0 +1,374 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2016 OpenFOAM Foundation
+    (c) 2017 OpenCFD Ltd.
+
+Class
+    Foam::wallBoundedParticle
+
+Description
+    Particle class that tracks on triangles of boundary faces. Use
+    trackToEdge similar to trackToFace on particle.
+
+SourceFiles
+    wallBoundedParticle.C
+    wallBoundedParticleTemplates.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef wallBoundedParticle_H
+#define wallBoundedParticle_H
+
+#include "particle/particle.H"
+#include "memory/autoPtr/autoPtr.H"
+#include "db/IOstreams/IOstreams/InfoProxy.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+
+// Forward declaration of friend functions and operators
+
+class wallBoundedParticle;
+
+Ostream& operator<<(Ostream&, const wallBoundedParticle&);
+Ostream& operator<<(Ostream&, const InfoProxy<wallBoundedParticle>&);
+
+
+/*---------------------------------------------------------------------------*\
+                     Class wallBoundedParticle Declaration
+\*---------------------------------------------------------------------------*/
+
+class wallBoundedParticle
+:
+    public particle
+{
+    // Private data
+
+        //- Size in bytes of the fields
+        static const std::size_t sizeofFields_;
+
+
+public:
+
+    //- Class used to pass tracking data to the trackToFace function
+    template<class CloudType>
+    class TrackingData
+    :
+        public particle::TrackingData<CloudType>
+    {
+
+    public:
+
+        const PackedBoolList& isWallPatch_;
+
+        // Constructors
+
+            inline TrackingData
+            (
+                CloudType& cloud,
+                const PackedBoolList& isWallPatch
+            )
+            :
+                particle::TrackingData<CloudType>
+                (
+                    cloud
+                ),
+                isWallPatch_(isWallPatch)
+            {}
+    };
+
+
+protected:
+
+    // Protected data
+
+        //- Particle is on mesh edge:
+        //      const face& f = mesh.faces()[tetFace()]
+        //      const edge e(f[meshEdgeStart_], f.nextLabel(meshEdgeStart_));
+        //  Note that this real edge
+        //  is also one of the edges of the face-triangle (from
+        //  tetFace()+tetPt()).
+        label meshEdgeStart_;
+
+        //- Particle is on diagonal edge:
+        //      const face& f = mesh.faces()[tetFace()]
+        //      label faceBasePti = mesh.tetBasePtIs()[facei];
+        //      label diagPti = (faceBasePti+diagEdge_)%f.size();
+        //      const edge e(f[faceBasePti], f[diagPti]);
+        label diagEdge_;
+
+
+    // Protected Member Functions
+
+        //- Construct current edge
+        edge currentEdge() const;
+
+        //- Replacement for particle::currentTetIndices() that avoids bombing
+        //  out on invalid tet decomposition (tetBasePtIs = -1)
+        tetIndices currentTetIndices() const;
+
+        //- Replacement for particle::crossEdgeConnectedFace that avoids bombing
+        //  out on invalid tet decomposition (tetBasePtIs = -1)
+        void crossEdgeConnectedFace
+        (
+            const label& celli,
+            label& tetFacei,
+            label& tetPti,
+            const edge& e
+        );
+
+        //- Cross mesh edge into different face on same cell
+        void crossEdgeConnectedFace(const edge& meshEdge);
+
+        //- Cross diagonal edge into different triangle on same face,cell
+        void crossDiagonalEdge();
+
+        //- Track through single triangle
+        scalar trackFaceTri(const vector& n, const vector& endPosition, label&);
+
+        //- Is current triangle in the track direction
+        bool isTriAlongTrack(const vector& n, const point& endPosition) const;
+
+
+    // Patch interactions
+
+        //- Do all patch interaction
+        template<class TrackData>
+        void patchInteraction(TrackData& td, const scalar trackFraction);
+
+        //- Overridable function to handle the particle hitting a patch
+        //  Executed before other patch-hitting functions
+        template<class TrackData>
+        bool hitPatch
+        (
+            const polyPatch&,
+            TrackData& td,
+            const label patchi,
+            const scalar trackFraction,
+            const tetIndices& tetIs
+        );
+
+        //- Overridable function to handle the particle hitting a wedge
+        template<class TrackData>
+        void hitWedgePatch
+        (
+            const wedgePolyPatch&,
+            TrackData& td
+        );
+
+        //- Overridable function to handle the particle hitting a
+        //  symmetry plane
+        template<class TrackData>
+        void hitSymmetryPlanePatch
+        (
+            const symmetryPlanePolyPatch&,
+            TrackData& td
+        );
+
+        //- Overridable function to handle the particle hitting a
+        //  symmetry patch
+        template<class TrackData>
+        void hitSymmetryPatch
+        (
+            const symmetryPolyPatch&,
+            TrackData& td
+        );
+
+        //- Overridable function to handle the particle hitting a cyclic
+        template<class TrackData>
+        void hitCyclicPatch
+        (
+            const cyclicPolyPatch&,
+            TrackData& td
+        );
+
+        //- Overridable function to handle the particle hitting a
+        //- processorPatch
+        template<class TrackData>
+        void hitProcessorPatch
+        (
+            const processorPolyPatch&,
+            TrackData& td
+        );
+
+        //- Overridable function to handle the particle hitting a wallPatch
+        template<class TrackData>
+        void hitWallPatch
+        (
+            const wallPolyPatch&,
+            TrackData& td,
+            const tetIndices&
+        );
+
+        //- Overridable function to handle the particle hitting a polyPatch
+        template<class TrackData>
+        void hitPatch
+        (
+            const polyPatch&,
+            TrackData& td
+        );
+
+public:
+
+    // Constructors
+
+        //- Construct from components
+        wallBoundedParticle
+        (
+            const polyMesh& c,
+            const vector& position,
+            const label celli,
+            const label tetFacei,
+            const label tetPti,
+            const label meshEdgeStart,
+            const label diagEdge
+        );
+
+        //- Construct from Istream
+        wallBoundedParticle
+        (
+            const polyMesh& c,
+            Istream& is,
+            bool readFields = true
+        );
+
+        //- Construct copy
+        wallBoundedParticle(const wallBoundedParticle& p);
+
+        //- Construct and return a clone
+        autoPtr<particle> clone() const
+        {
+            return autoPtr<particle>(new wallBoundedParticle(*this));
+        }
+
+        //- Factory class to read-construct particles used for
+        //  parallel transfer
+        class iNew
+        {
+            const polyMesh& mesh_;
+
+        public:
+
+            iNew(const polyMesh& mesh)
+            :
+                mesh_(mesh)
+            {}
+
+            autoPtr<wallBoundedParticle> operator()
+            (
+                Istream& is
+            ) const
+            {
+                return autoPtr<wallBoundedParticle>
+                (
+                    new wallBoundedParticle(mesh_, is, true)
+                );
+            }
+        };
+
+
+    // Member Functions
+
+        // Access
+
+            //- -1 or label of mesh edge
+            inline label meshEdgeStart() const
+            {
+                return meshEdgeStart_;
+            }
+
+            //- -1 or diagonal edge
+            inline label diagEdge() const
+            {
+                return diagEdge_;
+            }
+
+
+        // Track
+
+            //- Equivalent of trackToFace
+            template<class TrackData>
+            scalar trackToEdge
+            (
+                TrackData& td,
+                const vector& endPosition
+            );
+
+
+        // Info
+
+            //- Return info proxy.
+            //  Used to print particle information to a stream
+            inline InfoProxy<wallBoundedParticle> info() const
+            {
+                return *this;
+            }
+
+
+        // I-O
+
+            //- Read
+            template<class CloudType>
+            static void readFields(CloudType&);
+
+            //- Write
+            template<class CloudType>
+            static void writeFields(const CloudType&);
+
+
+    // Ostream Operator
+
+        friend Ostream& operator<<
+        (
+            Ostream&,
+            const wallBoundedParticle&
+        );
+
+        friend Ostream& operator<<
+        (
+            Ostream&,
+            const InfoProxy<wallBoundedParticle>&
+        );
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#ifdef NoRepository
+    #include "wallBoundedStreamLine/wallBoundedParticleTemplates.C"
+#endif
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

@@ -1,0 +1,168 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2016 OpenFOAM Foundation
+
+Class
+    Foam::limitWith
+
+Group
+    grpFvLimitedSurfaceInterpolationSchemes
+
+Description
+    limitWith differencing scheme limits the specified scheme with the
+    specified limiter.
+
+SourceFiles
+    limitWith.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef limitWith_H
+#define limitWith_H
+
+#include "interpolation/surfaceInterpolation/surfaceInterpolationScheme/surfaceInterpolationScheme.H"
+#include "interpolation/surfaceInterpolation/limitedSchemes/limitedSurfaceInterpolationScheme/limitedSurfaceInterpolationScheme.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+
+/*---------------------------------------------------------------------------*\
+                           Class limitWith Declaration
+\*---------------------------------------------------------------------------*/
+
+template<class Type>
+class limitWith
+:
+    public surfaceInterpolationScheme<Type>
+{
+    // Private Member Functions
+
+        //- Interpolation scheme
+        tmp<surfaceInterpolationScheme<Type>> tInterp_;
+
+        //- Limiter
+        tmp<limitedSurfaceInterpolationScheme<Type>> tLimiter_;
+
+
+        //- Disallow default bitwise copy construct
+        limitWith(const limitWith&);
+
+        //- Disallow default bitwise assignment
+        void operator=(const limitWith&);
+
+
+public:
+
+    //- Runtime type information
+    TypeName("limitWith");
+
+
+    // Constructors
+
+        //- Construct from mesh and Istream.
+        //  The name of the flux field is read from the Istream and looked-up
+        //  from the mesh objectRegistry
+        limitWith
+        (
+            const fvMesh& mesh,
+            const objectRegistry& db,
+            Istream& is
+        )
+        :
+            surfaceInterpolationScheme<Type>(mesh),
+            tInterp_
+            (
+                surfaceInterpolationScheme<Type>::New(mesh, db, is)
+            ),
+            tLimiter_
+            (
+                limitedSurfaceInterpolationScheme<Type>::New(mesh, db, is)
+            )
+        {}
+
+        //- Construct from mesh, faceFlux and Istream
+        limitWith
+        (
+            const fvMesh& mesh,
+            const surfaceScalarField& faceFlux,
+            Istream& is
+        )
+        :
+            surfaceInterpolationScheme<Type>(mesh),
+            tInterp_
+            (
+                surfaceInterpolationScheme<Type>::New(mesh, faceFlux, is)
+            ),
+            tLimiter_
+            (
+                limitedSurfaceInterpolationScheme<Type>::New(mesh, faceFlux, is)
+            )
+        {}
+
+
+    // Member Functions
+
+        //- Return the interpolation weighting factors
+        virtual tmp<surfaceScalarField> weights
+        (
+            const GeometricField<Type, fvPatchField, volMesh>& vf
+        ) const
+        {
+            return tLimiter_().weights
+            (
+                vf,
+                tInterp_().weights(vf),
+                tLimiter_().limiter(vf)
+            );
+        }
+
+        //- Return true if this scheme uses an explicit correction
+        virtual bool corrected() const
+        {
+            return tInterp_().corrected();
+        }
+
+        //- Return the explicit correction to the face-interpolate
+        //  for the given field
+        virtual tmp<GeometricField<Type, fvsPatchField, surfaceMesh>>
+        correction(const GeometricField<Type, fvPatchField, volMesh>& vf) const
+        {
+            return tLimiter_().limiter(vf)*tInterp_().correction(vf);
+        }
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

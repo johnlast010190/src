@@ -1,0 +1,112 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2021-2022 OpenFOAM Foundation
+    (c) 2022 Esi Ltd.
+
+\*---------------------------------------------------------------------------*/
+
+#include "fields/fvPatchFields/constraint/nonConformalProcessorCyclic/nonConformalProcessorCyclicFvPatchField.H"
+
+// * * * * * * * * * * * * * * * * Constructors * * * * * * * * * * * * * * //
+
+template<class Type>
+Foam::nonConformalProcessorCyclicFvPatchField<Type>::
+nonConformalProcessorCyclicFvPatchField
+(
+    const fvPatch& p,
+    const DimensionedField<Type, volMesh>& iF
+)
+:
+    processorCyclicFvPatchField<Type>(p, iF),
+    procPatch_(refCast<const nonConformalProcessorCyclicFvPatch>(p))
+{}
+
+
+template<class Type>
+Foam::nonConformalProcessorCyclicFvPatchField<Type>::
+nonConformalProcessorCyclicFvPatchField
+(
+    const fvPatch& p,
+    const DimensionedField<Type, volMesh>& iF,
+    const dictionary& dict
+)
+:
+    processorCyclicFvPatchField<Type>(p, iF, dict),
+    procPatch_(refCast<const nonConformalProcessorCyclicFvPatch>(p))
+{}
+
+
+template<class Type>
+Foam::nonConformalProcessorCyclicFvPatchField<Type>::
+nonConformalProcessorCyclicFvPatchField
+(
+    const fvPatch& p,
+    const DimensionedField<Type, volMesh>& iF,
+    const Field<Type>& f
+)
+:
+    processorCyclicFvPatchField<Type>(p, iF, f),
+    procPatch_(refCast<const nonConformalProcessorCyclicFvPatch>(p))
+{}
+
+
+template<class Type>
+Foam::nonConformalProcessorCyclicFvPatchField<Type>::
+nonConformalProcessorCyclicFvPatchField
+(
+    const nonConformalProcessorCyclicFvPatchField<Type>& ptf,
+    const fvPatch& p,
+    const DimensionedField<Type, volMesh>& iF,
+    const fvPatchFieldMapper& mapper
+)
+:
+    processorCyclicFvPatchField<Type>(ptf, p, iF, mapper),
+    procPatch_(refCast<const nonConformalProcessorCyclicFvPatch>(p))
+{}
+
+
+template<class Type>
+Foam::nonConformalProcessorCyclicFvPatchField<Type>::
+nonConformalProcessorCyclicFvPatchField
+(
+    const nonConformalProcessorCyclicFvPatchField<Type>& ptf,
+    const DimensionedField<Type, volMesh>& iF
+)
+:
+    processorCyclicFvPatchField<Type>(ptf, iF),
+    procPatch_(refCast<const nonConformalProcessorCyclicFvPatch>(ptf.patch()))
+{}
+
+
+// * * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * //
+
+template<class Type>
+Foam::nonConformalProcessorCyclicFvPatchField<Type>::
+~nonConformalProcessorCyclicFvPatchField()
+{}
+
+
+// ************************************************************************* //

@@ -1,0 +1,79 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      foamVDBMapDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+sourceCase      "../";
+
+sourceTime      latestTime;//<scalar>|latestTime //optional, default latestTime
+targetTime      0; //optional, default 0
+
+// optional, default will sample all fields present in source
+fields          (p U);
+
+voxelSize       0.05; // (super)sampling resolution
+
+//optional. Default fields.vdb
+fieldsOutput   "p_U.vdb"
+
+//optional map to a samplingBox (default maps to targetMesh)
+samplingBox
+{
+    min (-2 -2 -0.317);
+    max (6 2 2);
+
+    // optional: overwrites voxelSize and adjusts boundBox
+    // to have this specific number of nX nY nZ
+    outputDivisions (256 128 128);
+
+
+    outputLevel        0;
+    superSamplingLevel 1;
+
+    // optional: write serial mesh and fields for visualization
+    // note: this will overwrite the targetMesh if present
+    visualization true;
+
+    // optional: if present will calculate narrow-band levelset
+    // of geometry
+    sampleGeometry
+    {
+        geometry
+        {
+            car_closed.stl
+            {
+                name car;
+                type triSurfaceMesh;
+            }
+        }
+
+        refinementSurfaces
+        {
+            car
+            {
+                level ( /*outputLevel*/0 /*superSamplingLevel*/1 );
+            }
+        }
+
+        // controls thickness of narrow-band levelset
+        // makes sense only if geometry is present
+        nCellsBetweenLevels 1;
+
+        // normalizes levelset between 1(inside) and 0 (outside)
+        normalizeLevelset   true;
+
+        // optional: default geometry.vdb
+        levelsetOutput      "geometry.vdb";
+
+        // saves also the levelset at supersampling resolution
+        saveHighResGrid     false;//true;
+    }
+}
+
+//controls multithreading (for debug)
+threads 8;
+// ************************************************************************* //

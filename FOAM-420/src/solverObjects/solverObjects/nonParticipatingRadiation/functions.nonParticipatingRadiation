@@ -1,0 +1,7 @@
+    radiation
+    {
+        type            nonParticipatingRadiation;
+        functionObjectLibs ( "libsolverFunctionObjects.so" );
+        region          region0;
+    }
+

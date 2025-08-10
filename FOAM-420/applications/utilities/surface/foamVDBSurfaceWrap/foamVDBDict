@@ -1,0 +1,31 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      foamVDBSurfaceWrap;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+geometry
+{
+    F1_2022_0_45_mm.stp
+    {
+        type CADSurface;
+
+        name F1_2022_SL;
+
+        linDeflection   0.5;
+        angDeflection   0.5;
+        //forceTriangulation true;
+    }
+}
+
+minEdge  5;
+isoValue 0;//20; // default 0
+adaptivity 1e-3; //default 1e-3; set to 0 for no face size adaptivity
+
+outputFile "f1car.obj";
+
+
+// ************************************************************************* //

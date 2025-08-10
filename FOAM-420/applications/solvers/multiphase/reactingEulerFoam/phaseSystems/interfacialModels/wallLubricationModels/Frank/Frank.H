@@ -1,0 +1,126 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2014-2015 OpenFOAM Foundation
+
+Class
+    Foam::wallLubricationModels::Frank
+
+Description
+    Wall lubrication model of Frank.
+
+    References:
+    \verbatim
+        "Implementation and Comparison of Correlations for interfacial Forces
+         in a Gas-Liquid System within an Euler-Euler Framework"
+        Otromke, M.
+        PhD Thesis
+        April 2013
+    \endverbatim
+
+    \verbatim
+        "Advances in Computational Fluid Dynamics (CFD) of 3-dimensional Gas-
+         Liquid Multiphase Flows"
+        Frank, T.
+        NAFEMS Seminar: Simulation of Complex Flows (CFD), April 2005, pp. 1-18
+    \endverbatim
+
+SourceFiles
+    Frank.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef Frank_H
+#define Frank_H
+
+#include "interfacialModels/wallLubricationModels/wallLubricationModel/wallLubricationModel.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+
+class phasePair;
+
+namespace wallLubricationModels
+{
+
+/*---------------------------------------------------------------------------*\
+                            Class Frank Declaration
+\*---------------------------------------------------------------------------*/
+
+class Frank
+:
+    public wallLubricationModel
+{
+    // Private data
+
+        //- Coefficient d
+        const dimensionedScalar Cwd_;
+
+        //- Coefficient c
+        const dimensionedScalar Cwc_;
+
+        //- Power p
+        const scalar p_;
+
+
+public:
+
+    //- Runtime type information
+    TypeName("Frank");
+
+
+    // Constructors
+
+        //- Construct from components
+        Frank
+        (
+            const dictionary& dict,
+            const phasePair& pair
+        );
+
+
+    //- Destructor
+    virtual ~Frank();
+
+
+    // Member Functions
+
+        //- Return phase-intensive wall lubrication force
+        tmp<volVectorField> Fi() const;
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace wallLubricationModels
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

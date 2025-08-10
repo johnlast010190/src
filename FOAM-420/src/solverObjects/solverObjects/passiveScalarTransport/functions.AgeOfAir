@@ -1,0 +1,52 @@
+    AoA
+    {
+        type            passiveScalarTransport;
+        functionObjectLibs ( "libsolverFunctionObjects.so" );
+        region          region0;
+        
+        fieldName       AoA;
+        phiName         phi; //optional
+
+        solverOptions
+        {
+            solveTime       true; //optional
+            solveConvection true; //optional
+            solveDiffusion  true; //optional
+
+            boundValue      0.0; //optional - bounding off by default
+            convectionScheme Gauss linearUpwind cellLimited Gauss linear 1;
+        }
+                
+        regions //any cell topo source - defines volumetric sources
+        (
+            boxToCell
+            {
+                box (-1000 -1000 -1000) (1000 1000 1000);
+
+                //fixedValue 1;   //fixes cell value - optional - no default
+                fixedSource 1;  //Su source value - optional - no default
+                //linearSource 4; //SuSp source value - optional - no default
+            }
+        );
+        
+        //defines initial value and boundary conditions. Will preferencially 
+        //read field from file at startup
+        fieldDefinition 
+        {
+            type scalar; //vector, tensor, sphericlTensor, symmetricTensor
+            dimensions [ 0 0 1 0 0 0 0 ];
+            internalField uniform 0;
+            
+            boundaryTypeDefaults
+            {
+                walls {type zeroGradient;}
+
+                outlets {type inletOutlet; inletValue uniform 0; value uniform 0;}
+
+                inlets {type inletOutlet; inletValue uniform 0; value uniform 0;}
+            }
+            boundaryConditions
+            {
+            }
+        }
+    }

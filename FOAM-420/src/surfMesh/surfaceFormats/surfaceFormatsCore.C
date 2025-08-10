@@ -1,0 +1,196 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2017 OpenCFD Ltd.
+    (c) 2011-2012 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "surfaceFormats/surfaceFormatsCore.H"
+
+#include "db/Time/Time.H"
+#include "containers/Lists/ListOps/ListOps.H"
+#include "db/IOstreams/Fstreams/IFstream.H"
+#include "db/IOstreams/Fstreams/OFstream.H"
+#include "surfMesh/surfMesh.H"
+
+// * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
+
+Foam::word Foam::fileFormats::surfaceFormatsCore::nativeExt("ofs");
+
+// * * * * * * * * * * * * * Static Member Functions * * * * * * * * * * * * //
+
+Foam::string Foam::fileFormats::surfaceFormatsCore::getLineNoComment
+(
+    IFstream& is
+)
+{
+    string line;
+    do
+    {
+        is.getLine(line);
+    }
+    while ((line.empty() || line[0] == '#') && is.good());
+
+    return line;
+}
+
+
+#if 0
+Foam::fileName Foam::fileFormats::surfaceFormatsCore::localMeshFileName
+(
+    const word& surfName
+)
+{
+    const word name(surfName.size() ? surfName : surfaceRegistry::defaultName);
+
+    return fileName
+    (
+        surfaceRegistry::prefix/name/surfMesh::meshSubDir
+      / name + "." + nativeExt
+    );
+}
+
+
+Foam::fileName Foam::fileFormats::surfaceFormatsCore::findMeshInstance
+(
+    const Time& t,
+    const word& surfName
+)
+{
+    fileName localName = localMeshFileName(surfName);
+
+    // Search back through the time directories list to find the time
+    // closest to and lower than current time
+
+    instantList ts = t.times();
+    label instanceI;
+
+    for (instanceI = ts.size()-1; instanceI >= 0; --instanceI)
+    {
+        if (ts[instanceI].value() <= t.timeOutputValue())
+        {
+            break;
+        }
+    }
+
+    // Noting that the current directory has already been searched
+    // for mesh data, start searching from the previously stored time directory
+
+    if (instanceI >= 0)
+    {
+        for (label i = instanceI; i >= 0; --i)
+        {
+            if (isFile(t.path()/ts[i].name()/localName))
+            {
+                return ts[i].name();
+            }
+        }
+    }
+
+    return t.constant();
+}
+
+
+Foam::fileName Foam::fileFormats::surfaceFormatsCore::findMeshFile
+(
+    const Time& t,
+    const word& surfName
+)
+{
+    fileName localName = localMeshFileName(surfName);
+
+    // Search back through the time directories list to find the time
+    // closest to and lower than current time
+
+    instantList ts = t.times();
+    label instanceI;
+
+    for (instanceI = ts.size()-1; instanceI >= 0; --instanceI)
+    {
+        if (ts[instanceI].value() <= t.timeOutputValue())
+        {
+            break;
+        }
+    }
+
+    // Noting that the current directory has already been searched
+    // for mesh data, start searching from the previously stored time directory
+
+    if (instanceI >= 0)
+    {
+        for (label i = instanceI; i >= 0; --i)
+        {
+            fileName testName(t.path()/ts[i].name()/localName);
+
+            if (isFile(testName))
+            {
+                return testName;
+            }
+        }
+    }
+
+    // fallback to "constant"
+    return t.path()/t.constant()/localName;
+}
+#endif
+
+
+bool Foam::fileFormats::surfaceFormatsCore::checkSupport
+(
+    const wordHashSet& available,
+    const word& ext,
+    const bool verbose,
+    const word& functionName
+)
+{
+    if (available.found(ext))
+    {
+        return true;
+    }
+    else if (verbose)
+    {
+        Info<<"Unknown file extension for " << functionName
+            << " : " << ext << nl
+            << "Valid types: " << flatOutput(available.sortedToc()) << endl;
+    }
+
+    return false;
+}
+
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+Foam::fileFormats::surfaceFormatsCore::surfaceFormatsCore()
+{}
+
+
+// * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * * //
+
+Foam::fileFormats::surfaceFormatsCore::~surfaceFormatsCore()
+{}
+
+
+// ************************************************************************* //

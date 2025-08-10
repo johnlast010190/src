@@ -1,0 +1,92 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "submodels/Kinematic/InjectionModel/KinematicLookupTableInjection/kinematicParcelInjectionData.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+Foam::kinematicParcelInjectionData::kinematicParcelInjectionData(Istream& is)
+{
+    is.check("reading (Px Py Pz)");
+    is >> x_;
+
+    is.check("reading (Ux Uy Uz)");
+    is >> U_;
+
+    is.check("reading d");
+    is >> d_;
+
+    is.check("reading rho");
+    is >> rho_;
+
+    is.check("reading mDot");
+    is >> mDot_;
+
+    is.check(FUNCTION_NAME);
+}
+
+
+// * * * * * * * * * * * * * * * IOstream Operators  * * * * * * * * * * * * //
+
+Foam::Ostream& Foam::operator<<
+(
+    Ostream& os,
+    const kinematicParcelInjectionData& data
+)
+{
+    os << data.x_ << data.U_ << data.d_ << data.rho_ << data.mDot_;
+
+    return os;
+}
+
+
+Foam::Istream& Foam::operator>>(Istream& is, kinematicParcelInjectionData& data)
+{
+    is.check("reading (Px Py Pz)");
+    is >> data.x_;
+
+    is.check("reading (Ux Uy Uz)");
+    is >> data.U_;
+
+    is.check("reading d");
+    is >> data.d_;
+
+    is.check("reading rho");
+    is >> data.rho_;
+
+    is.check("reading mDot");
+    is >> data.mDot_;
+
+    is.check(FUNCTION_NAME);
+
+    return is;
+}
+
+
+// ************************************************************************* //

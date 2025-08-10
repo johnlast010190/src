@@ -1,0 +1,22 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      wallhtcDict;
+}
+//Reference or Bulk temperature of the 
+//fluid for HTC and Nusselt number calculation.
+//If not specified, default value of 298.15 k  will be used.
+Tref 299.9;
+
+//Reference length for Nusselt number
+//calculation.
+//If not specified, default value of 1 m  will be used.
+lref 0.0254;
+
+//Reference thermal conductivity for 
+//Nusselt number calculation
+//If not specified, default value of 0.02624 W/mk  will be used.
+kref 0.02624;

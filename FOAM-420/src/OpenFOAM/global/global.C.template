@@ -1,0 +1,119 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011 OpenFOAM Foundation
+
+Description
+    Define the globals used in the OpenFOAM library.
+    It is important that these are constructed in the appropriate order to
+    avoid the use of unconstructed data in the global namespace.
+
+    This file has the extension .Cver to trigger a Makefile rule that converts
+    'VERSION\_STRING' and 'BUILD\_STRING' into the appropriate strings.
+
+\*---------------------------------------------------------------------------*/
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+#include "global/foamVersion.H"
+#include "primitives/endian/endian.H"
+#include "primitives/ints/label/label.H"
+#include "primitives/Scalar/scalar/scalar.H"
+
+const char* const Foam::FOAMversion = "@FOAM_PROJECT_VERSION@";
+const char* const Foam::FOAMbuild = "@FOAM_PROJECT_VERSION@-@GIT_HASH@";
+// Information about machine endian, label and scalar sizes
+const std::string Foam::FOAMbuildArch =
+(
+#ifdef FOAM_LITTLE_ENDIAN
+    "LSB"
+#elif defined (FOAM_BIG_ENDIAN)
+    "MSB"
+#else
+    "???"
+#endif
+    ";label="  + std::to_string(8*sizeof(Foam::label))
+  + ";scalar=" + std::to_string(8*sizeof(Foam::scalar))
+);
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Setup an error handler for the global new operator
+
+#include "global/new.C"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Create the nullObject singleton
+
+#include "primitives/nullObject/nullObject.C"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Global IO streams
+
+#include "db/IOstreams/IOstreams.C"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#include "global/JobInfo/JobInfo.H"
+bool Foam::JobInfo::constructed(false);
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Global error definitions (initialised by construction)
+
+#include "db/error/messageStream.C"
+#include "db/error/error.C"
+#include "db/error/IOerror.C"
+#include "db/IOstreams/token/token.C"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Read the debug and info switches
+
+#include "global/debug/debug.C"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Read file modification checking switches
+
+#include "db/regIOobject/regIOobject.C"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Read parallel communication switches
+
+#include "db/IOstreams/Pstreams/UPstreamGlobals.C"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Read constants
+
+#include "global/constants/constants.C"
+#include "global/constants/dimensionedConstants.C"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Read and set cell models
+
+#include "meshes/meshShapes/cellModeller/globalCellModeller.C"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Create the jobInfo file in the $FOAM_JOB_DIR/runningJobs directory
+
+#include "global/JobInfo/JobInfo.C"
+
+// ************************************************************************* //

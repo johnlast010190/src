@@ -1,0 +1,128 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2013 OpenFOAM Foundation
+
+Application
+    surfaceClean
+
+Group
+    grpSurfaceUtilities
+
+Description
+    Utility to clean surfaces.
+
+    Current functionality
+    - removes baffles
+    - collapses small edges, removing triangles.
+    - converts sliver triangles into split edges by projecting point onto
+      base of triangle.
+
+\*---------------------------------------------------------------------------*/
+
+#include "triSurface/triSurface.H"
+#include "global/argList/argList.H"
+#include "db/IOstreams/Fstreams/OFstream.H"
+
+#include "collapseBase.H"
+#include "collapseEdge.H"
+
+using namespace Foam;
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+
+int main(int argc, char *argv[])
+{
+    argList::noParallel();
+    argList::validArgs.append("surfaceFile");
+    argList::validArgs.append("min length");
+    argList::validArgs.append("min quality");
+    argList::validArgs.append("output surfaceFile");
+    argList::addBoolOption
+    (
+        "noClean",
+        "suppress surface checking/cleanup on the input surface"
+    );
+    argList args(argc, argv);
+
+    const fileName inFileName = args[1];
+    const scalar minLen = args.argRead<scalar>(2);
+    const scalar minQuality = args.argRead<scalar>(3);
+    const fileName outFileName = args[4];
+
+    Info<< "Reading surface " << inFileName << nl
+        << "Collapsing all triangles with" << nl
+        << "    edges or heights < " << minLen << nl
+        << "    quality          < " << minQuality << nl
+        << "Writing result to " << outFileName << nl << endl;
+
+
+    Info<< "Reading surface from " << inFileName << " ..." << nl << endl;
+    triSurface surf(inFileName);
+    surf.writeStats(Info);
+
+    if (!args.optionFound("noClean"))
+    {
+        Info<< "Removing duplicate and illegal triangles ..." << nl << endl;
+        surf.cleanup(true);
+    }
+
+    Info<< "Collapsing triangles to edges ..." << nl << endl;
+
+    while (true)
+    {
+        label nEdgeCollapse = collapseEdge(surf, minLen);
+
+        if (nEdgeCollapse == 0)
+        {
+            break;
+        }
+    }
+    while (true)
+    {
+        label nSplitEdge = collapseBase(surf, minLen, minQuality);
+
+        if (nSplitEdge == 0)
+        {
+            break;
+        }
+    }
+
+    Info<< nl
+        << "Resulting surface:" << endl;
+    surf.writeStats(Info);
+
+    Info<< nl
+        << "Writing refined surface to " << outFileName << " ..." << endl;
+    surf.write(outFileName);
+
+    Info<< "\nEnd\n" << endl;
+
+    return 0;
+}
+
+
+// ************************************************************************* //

@@ -1,0 +1,286 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2017 OpenCFD Ltd.
+    (c) 2011-2017 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "fieldValues/volFieldValue/volFieldValue.H"
+#include "fvMesh/fvMesh.H"
+#include "fields/volFields/volFields.H"
+#include "db/runTimeSelection/construction/addToRunTimeSelectionTable.H"
+
+// * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
+
+namespace Foam
+{
+namespace functionObjects
+{
+namespace fieldValues
+{
+    defineTypeNameAndDebug(volFieldValue, 0);
+    addToRunTimeSelectionTable(fieldValue, volFieldValue, dictionary);
+    addToRunTimeSelectionTable(functionObject, volFieldValue, dictionary);
+}
+}
+}
+
+template<>
+const char*
+Foam::NamedEnum
+<
+    Foam::functionObjects::fieldValues::volFieldValue::operationType,
+    13
+>::names[] =
+{
+    "none",
+    "sum",
+    "weightedSum",
+    "sumMag",
+    "average",
+    "weightedAverage",
+    "volAverage",
+    "weightedVolAverage",
+    "volIntegrate",
+    "weightedVolIntegrate",
+    "min",
+    "max",
+    "CoV"
+};
+
+const Foam::NamedEnum
+<
+    Foam::functionObjects::fieldValues::volFieldValue::operationType,
+    13
+> Foam::functionObjects::fieldValues::volFieldValue::operationTypeNames_;
+
+
+// * * * * * * * * * * * * Protected Member Functions  * * * * * * * * * * * //
+
+bool Foam::functionObjects::fieldValues::volFieldValue::needsVol() const
+{
+    // Only some operations need the cell volume
+    switch (operation_)
+    {
+        case opVolAverage:
+        case opWeightedVolAverage:
+        case opVolIntegrate:
+        case opWeightedVolIntegrate:
+        case opCoV:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+
+bool Foam::functionObjects::fieldValues::volFieldValue::needsWeight() const
+{
+    // Only a few operations use weight field
+    switch (operation_)
+    {
+        case opWeightedSum:
+        case opWeightedAverage:
+        case opWeightedVolAverage:
+        case opWeightedVolIntegrate:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+
+void Foam::functionObjects::fieldValues::volFieldValue::initialise
+(
+    const dictionary& dict
+)
+{
+    weightFieldName_ = "none";
+    if (needsWeight())
+    {
+        if (dict.readIfPresent("weightField", weightFieldName_))
+        {
+            Info<< "    weight field = " << weightFieldName_;
+        }
+    }
+
+    Info<< nl << endl;
+}
+
+
+void Foam::functionObjects::fieldValues::volFieldValue::writeFileHeader
+(
+    Ostream& os
+) const
+{
+    volRegion::writeFileHeader(*this, os);
+    if (weightFieldName_ != "none")
+    {
+        writeHeaderValue(os, "Weight field", weightFieldName_);
+    }
+
+    writeCommented(os, "Time");
+
+    forAll(fields_, fieldi)
+    {
+        os  << tab << operationTypeNames_[operation_]
+            << "(" << fields_[fieldi] << ")";
+    }
+
+    os  << endl;
+}
+
+
+Foam::label Foam::functionObjects::fieldValues::volFieldValue::writeAll
+(
+    const scalarField& V,
+    const scalarField& weightField
+)
+{
+    label nProcessed = 0;
+
+    forAll(fields_, i)
+    {
+        const word& fieldName = fields_[i];
+
+        if
+        (
+            writeValues<scalar>(fieldName, V, weightField)
+         || writeValues<vector>(fieldName, V, weightField)
+         || writeValues<sphericalTensor>(fieldName, V, weightField)
+         || writeValues<symmTensor>(fieldName, V, weightField)
+         || writeValues<tensor>(fieldName, V, weightField)
+        )
+        {
+            ++nProcessed;
+        }
+        else
+        {
+            WarningInFunction
+                << "Requested field " << fieldName
+                << " not found in database and not processed"
+                << endl;
+        }
+    }
+
+    return nProcessed;
+}
+
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+Foam::functionObjects::fieldValues::volFieldValue::volFieldValue
+(
+    const word& name,
+    const Time& runTime,
+    const dictionary& dict
+)
+:
+    fieldValue(name, runTime, dict, typeName),
+    volRegion(fieldValue::mesh_, dict),
+    operation_(operationTypeNames_.read(dict.lookup("operation"))),
+    weightFieldName_("none")
+{
+    read(dict);
+    writeFileHeader(file());
+}
+
+
+Foam::functionObjects::fieldValues::volFieldValue::volFieldValue
+(
+    const word& name,
+    const objectRegistry& obr,
+    const dictionary& dict
+)
+:
+    fieldValue(name, obr, dict, typeName),
+    volRegion(fieldValue::mesh_, dict),
+    operation_(operationTypeNames_.read(dict.lookup("operation"))),
+    weightFieldName_("none")
+{
+    read(dict);
+}
+
+
+// * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * * //
+
+Foam::functionObjects::fieldValues::volFieldValue::~volFieldValue()
+{}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+bool Foam::functionObjects::fieldValues::volFieldValue::read
+(
+    const dictionary& dict
+)
+{
+    fieldValue::read(dict);
+    initialise(dict);
+
+    return true;
+}
+
+
+bool Foam::functionObjects::fieldValues::volFieldValue::write()
+{
+    fieldValue::write();
+
+    if (Pstream::master())
+    {
+        writeTime(file());
+    }
+
+    // Only some operations need the cell volume
+    scalarField V;
+    if (needsVol())
+    {
+        V = filterField(fieldValue::mesh_.V());
+    }
+
+    // Weight field - zero-size means weight = 1
+    scalarField weightField;
+    if (weightFieldName_ != "none")
+    {
+        weightField = getFieldValues<scalar>(weightFieldName_, true);
+    }
+
+    writeAll(V, weightField);
+
+    if (Pstream::master())
+    {
+        file()<< endl;
+    }
+
+    Log << endl;
+
+    return true;
+}
+
+
+// ************************************************************************* //

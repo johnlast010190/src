@@ -1,0 +1,78 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2013-2016 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "fvMesh/extendedStencil/cellToCell/extendedCentredCellToCellStencil.H"
+#include "meshes/polyMesh/mapPolyMesh/mapDistribute/mapDistribute.H"
+#include "fvMesh/extendedStencil/cellToCell/globalIndexStencils/cellToCellStencil.H"
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+Foam::extendedCentredCellToCellStencil::extendedCentredCellToCellStencil
+(
+    const cellToCellStencil& stencil
+)
+:
+    extendedCellToCellStencil(stencil.mesh()),
+    stencil_(stencil)
+{
+    // Calculate distribute map (also renumbers elements in stencil)
+    List<Map<label>> compactMap(Pstream::nProcs());
+    mapPtr_.reset
+    (
+        new mapDistribute
+        (
+            stencil.globalNumbering(),
+            stencil_,
+            compactMap
+        )
+    );
+}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+void Foam::extendedCentredCellToCellStencil::compact()
+{
+    boolList isInStencil(map().constructSize(), false);
+
+    forAll(stencil_, celli)
+    {
+        const labelList& stencilCells = stencil_[celli];
+
+        forAll(stencilCells, i)
+        {
+            isInStencil[stencilCells[i]] = true;
+        }
+    }
+
+    mapPtr_().compact(isInStencil, Pstream::msgType());
+}
+
+
+// ************************************************************************* //

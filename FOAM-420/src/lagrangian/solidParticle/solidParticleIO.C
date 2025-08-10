@@ -1,0 +1,142 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2017 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "solidParticle.H"
+#include "db/IOstreams/IOstreams.H"
+
+// * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
+
+const std::size_t Foam::solidParticle::sizeofFields
+(
+    sizeof(solidParticle) - sizeof(particle)
+);
+
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+Foam::solidParticle::solidParticle
+(
+    const polyMesh& mesh,
+    Istream& is,
+    bool readFields
+)
+:
+    particle(mesh, is, readFields)
+{
+    if (readFields)
+    {
+        if (is.format() == IOstream::ASCII)
+        {
+            d_ = readScalar(is);
+            is >> U_;
+        }
+        else
+        {
+            is.read(reinterpret_cast<char*>(&d_), sizeofFields);
+        }
+    }
+
+    is.check(FUNCTION_NAME);
+}
+
+
+void Foam::solidParticle::readFields(Cloud<solidParticle>& c)
+{
+    bool valid = c.size();
+
+    particle::readFields(c);
+
+    IOField<scalar> d(c.fieldIOobject("d", IOobject::MUST_READ), valid);
+    c.checkFieldIOobject(c, d);
+
+    IOField<vector> U(c.fieldIOobject("U", IOobject::MUST_READ), valid);
+    c.checkFieldIOobject(c, U);
+
+    label i = 0;
+    forAllIter(Cloud<solidParticle>, c, iter)
+    {
+        solidParticle& p = iter();
+
+        p.d_ = d[i];
+        p.U_ = U[i];
+        i++;
+    }
+}
+
+
+void Foam::solidParticle::writeFields(const Cloud<solidParticle>& c)
+{
+    particle::writeFields(c);
+
+    label np = c.size();
+
+    IOField<scalar> d(c.fieldIOobject("d", IOobject::NO_READ), np);
+    IOField<vector> U(c.fieldIOobject("U", IOobject::NO_READ), np);
+
+    label i = 0;
+    forAllConstIter(Cloud<solidParticle>, c, iter)
+    {
+        const solidParticle& p = iter();
+
+        d[i] = p.d_;
+        U[i] = p.U_;
+        i++;
+    }
+
+    d.write(np > 0);
+    U.write(np > 0);
+}
+
+
+// * * * * * * * * * * * * * * * IOstream Operators  * * * * * * * * * * * * //
+
+Foam::Ostream& Foam::operator<<(Ostream& os, const solidParticle& p)
+{
+    if (os.format() == IOstream::ASCII)
+    {
+        os  << static_cast<const particle&>(p)
+            << token::SPACE << p.d_
+            << token::SPACE << p.U_;
+    }
+    else
+    {
+        os  << static_cast<const particle&>(p);
+        os.write
+        (
+            reinterpret_cast<const char*>(&p.d_),
+            solidParticle::sizeofFields
+        );
+    }
+
+    os.check(FUNCTION_NAME);
+    return os;
+}
+
+
+// ************************************************************************* //

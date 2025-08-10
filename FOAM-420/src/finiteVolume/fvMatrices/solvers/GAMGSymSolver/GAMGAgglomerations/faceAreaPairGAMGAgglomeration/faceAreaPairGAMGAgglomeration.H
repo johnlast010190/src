@@ -1,0 +1,92 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2013 OpenFOAM Foundation
+
+Class
+    Foam::faceAreaPairGAMGAgglomeration
+
+Description
+    Agglomerate using the pair algorithm.
+
+SourceFiles
+    faceAreaPairGAMGAgglomeration.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef faceAreaPairGAMGAgglomeration_H
+#define faceAreaPairGAMGAgglomeration_H
+
+#include "matrices/lduMatrix/solvers/GAMG/GAMGAgglomerations/pairGAMGAgglomeration/pairGAMGAgglomeration.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+
+/*---------------------------------------------------------------------------*\
+                 Class faceAreaPairGAMGAgglomeration Declaration
+\*---------------------------------------------------------------------------*/
+
+class faceAreaPairGAMGAgglomeration
+:
+    public pairGAMGAgglomeration
+{
+
+public:
+
+    //- Runtime type information
+    TypeName("faceAreaPair");
+
+
+    // Constructors
+
+        //- Construct given mesh and controls
+        faceAreaPairGAMGAgglomeration
+        (
+            const lduMesh& mesh,
+            const dictionary& controlDict
+        );
+
+        //- Construct given mesh and controls
+        faceAreaPairGAMGAgglomeration
+        (
+            const lduMesh& mesh,
+            const scalarField& cellVolumes,
+            const vectorField& faceAreas,
+            const dictionary& controlDict
+        );
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

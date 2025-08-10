@@ -1,0 +1,307 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2016-2018 OpenCFD Ltd.
+
+\*---------------------------------------------------------------------------*/
+
+#include "vtk/output/foamVtkSurfaceFieldWriter.H"
+#include "fields/fvsPatchFields/constraint/empty/emptyFvsPatchFields.H"
+#include "fields/fvsPatchFields/fvsPatchField/fvsPatchFields.H"
+#include "fields/surfaceFields/surfaceFields.H"
+#include "meshes/polyMesh/polyPatches/directPolyPatch/directPolyPatch.H"
+
+// * * * * * * * * * * * * * Private Member Functions  * * * * * * * * * * * //
+
+Foam::List<Foam::vector> Foam::vtk::surfaceFieldWriter::flattenBoundary
+(
+    const surfaceVectorField& field
+) const
+{
+    // Boundary field - flatten
+
+    List<vector> flat(mesh_.nBoundaryFaces(), Zero);
+
+    forAll(field.boundaryField(), patchi)
+    {
+        const polyPatch& temp = mesh_.boundaryMesh()[patchi];
+        const directPolyPatch& pp = refCast<const directPolyPatch>(temp);
+
+        const auto& pfld = field.boundaryField()[patchi];
+
+        if (!isA<emptyFvsPatchVectorField>(pfld))
+        {
+            SubList<vector>(flat, pp.size(), pp.offset()) = pfld;
+        }
+    }
+
+    return flat;
+}
+
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+Foam::vtk::surfaceFieldWriter::surfaceFieldWriter
+(
+    const fvMesh& mesh,
+    const vtk::outputOptions opts
+)
+:
+    vtk::fileWriter(vtk::fileTag::POLY_DATA, opts),
+    mesh_(mesh),
+    numberOfPoints_(0)
+{
+    opts_.append(false); // No append mode (horrible for streaming)
+    opts_.legacy(false); // Disallow legacy (inconvenient)
+}
+
+
+Foam::vtk::surfaceFieldWriter::surfaceFieldWriter
+(
+    const fvMesh& mesh,
+    const fileName& file,
+    bool parallel
+)
+:
+    surfaceFieldWriter(mesh)
+{
+    open(file, parallel);
+}
+
+
+Foam::vtk::surfaceFieldWriter::surfaceFieldWriter
+(
+    const fvMesh& mesh,
+    const vtk::outputOptions opts,
+    const fileName& file,
+    bool parallel
+)
+:
+    surfaceFieldWriter(mesh, opts)
+{
+    open(file, parallel);
+}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+bool Foam::vtk::surfaceFieldWriter::beginFile(std::string title)
+{
+    if (title.size())
+    {
+        return vtk::fileWriter::beginFile(title);
+    }
+
+
+    // Provide Default title
+
+    if (legacy())
+    {
+        return vtk::fileWriter::beginFile("surfaceFields");
+    }
+
+
+    // XML (inline)
+
+    return vtk::fileWriter::beginFile
+    (
+        "surfaceFields "
+        "case='" + mesh_.time().globalCaseName()
+      + "' region='" + mesh_.name()
+      + "' time='" + mesh_.time().timeName()
+      + "' index='" + Foam::name(mesh_.time().timeIndex())
+      + "'"
+    );
+}
+
+
+bool Foam::vtk::surfaceFieldWriter::writeGeometry()
+{
+    enter_Piece();
+
+    // Output
+
+    const pointField& centres = mesh_.faceCentres();
+
+    // PointData for each face.
+    numberOfPoints_ = centres.size();
+
+    if (parallel_)
+    {
+        reduce(numberOfPoints_, sumOp<label>());
+    }
+
+    // <Piece>
+    if (format_)
+    {
+        format()
+            .tag
+            (
+                vtk::fileTag::PIECE,
+                fileAttr::NUMBER_OF_POINTS, numberOfPoints_
+            );
+    }
+
+
+    // <Point>
+    if (format_)
+    {
+        const uint64_t payLoad =
+            vtk::sizeofData<float,3>(numberOfPoints_);
+
+        format().tag(vtk::fileTag::POINTS)
+            .beginDataArray<float,3>(vtk::dataArrayAttr::POINTS);
+
+        format().writeSize(payLoad);
+    }
+
+    if (parallel_)
+    {
+        // Internal faces
+        vtk::writeListParallel
+        (
+            format_.rawRef(),
+            SubList<point>(centres, mesh_.nInternalFaces())
+        );
+
+        // Boundary faces
+        vtk::writeListParallel
+        (
+            format_.rawRef(),
+            SubList<point>(centres, mesh_.boundaryMesh().range())
+        );
+    }
+    else
+    {
+        // Non-parallel: use a normal write
+
+        vtk::writeList(format(), centres);
+    }
+
+    if (format_)
+    {
+        format().flush();
+
+        // Non-legacy
+        format()
+            .endDataArray()
+            .endTag(vtk::fileTag::POINTS);
+    }
+
+    return true;
+}
+
+
+bool Foam::vtk::surfaceFieldWriter::beginCellData(label nFields)
+{
+    // No legacy, no CellData
+    return enter_CellData(0, 0);
+}
+
+
+bool Foam::vtk::surfaceFieldWriter::beginPointData(label nFields)
+{
+    // No legacy
+    return enter_PointData(numberOfPoints_, 0);
+}
+
+
+void Foam::vtk::surfaceFieldWriter::write(const surfaceVectorField& field)
+{
+    if (isState(outputState::POINT_DATA))
+    {
+        ++nPointData_;
+    }
+    else
+    {
+        FatalErrorInFunction
+            << "Bad writer state (" << stateNames[state_]
+            << ") - should be (" << stateNames[outputState::POINT_DATA]
+            << ") for field " << field.name() << nl << endl
+            << exit(FatalError);
+    }
+
+    label nFaces = field.mesh().nFaces();
+
+    if (parallel_)
+    {
+        reduce(nFaces, sumOp<label>());
+    }
+
+    if (nFaces != numberOfPoints_)
+    {
+        FatalErrorInFunction
+            << "Expecting " << numberOfPoints_
+            << " faces, but found " << nFaces
+            << exit(FatalError);
+    }
+
+    if (format_)
+    {
+        // Non-legacy
+        const uint64_t payLoad =
+            vtk::sizeofData<float, 3>(nFaces);
+
+        format().beginDataArray<float, 3>(field.name());
+        format().writeSize(payLoad);
+    }
+
+
+    // Internal field
+    const SubList<vector> internal(field, mesh_.nInternalFaces());
+
+    // Boundary field (flattened)
+    auto boundary(flattenBoundary(field));
+
+
+    if (parallel_)
+    {
+        // Internal field
+        vtk::writeListParallel(format_.rawRef(), internal);
+
+        // Boundary field
+        vtk::writeListParallel(format_.rawRef(), boundary);
+    }
+    else
+    {
+        // Non-parallel
+
+        // Internal field
+        vtk::writeList(format_.rawRef(), internal);
+
+        // Boundary field
+        vtk::writeList(format_.rawRef(), boundary);
+    }
+
+
+    if (format_)
+    {
+        format().flush();
+        format().endDataArray();
+    }
+}
+
+
+// ************************************************************************* //

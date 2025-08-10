@@ -1,0 +1,108 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2013-2017 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "edgeMesh/extendedEdgeMesh/extendedEdgeMeshFormats/extendedEdgeMeshFormat/extendedEdgeMeshFormat.H"
+#include "db/IOstreams/Fstreams/IFstream.H"
+#include "db/Time/Time.H"
+#include "edgeMesh/extendedEdgeMesh/extendedFeatureEdgeMesh/extendedFeatureEdgeMesh.H"
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+Foam::fileFormats::extendedEdgeMeshFormat::extendedEdgeMeshFormat
+(
+    const fileName& filename
+)
+{
+    read(filename);
+}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+bool Foam::fileFormats::extendedEdgeMeshFormat::read
+(
+    const fileName& filename
+)
+{
+    clear();
+
+    fileName dir = filename.path();
+    fileName caseName = dir.name();
+    fileName rootPath = dir.path();
+
+    // Construct dummy time to use as an objectRegistry
+    Time dummyTime
+    (
+        ".",        //rootPath,
+        ".",        //caseName,
+        "system",   //systemName,
+        "constant", //constantName,
+        false       //enableFunctionObjects
+    );
+
+    // Construct IOobject to re-use the headerOk & readHeader
+    // (so we can read ascii and binary)
+    IOobject io
+    (
+        filename,
+        dummyTime,
+        IOobject::NO_READ,
+        IOobject::NO_WRITE,
+        false
+    );
+
+    if (!io.typeHeaderOk<extendedFeatureEdgeMesh>(false))
+    {
+        FatalErrorInFunction
+            << "Cannot read file " << filename
+            << exit(FatalError);
+    }
+
+    const fileName fName(typeFilePath<extendedFeatureEdgeMesh>(io));
+
+    autoPtr<IFstream> isPtr(new IFstream(fName));
+    bool ok = false;
+    if (isPtr().good())
+    {
+        Istream& is = isPtr();
+        ok = io.readHeader(is);
+
+        if (ok)
+        {
+            // Use extendedEdgeMesh IO
+            is >> *this;
+            ok = is.good();
+        }
+    }
+
+    return ok;
+}
+
+
+// ************************************************************************* //

@@ -1,0 +1,145 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2016-2017 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "viscosityModels/strainRateFunction/strainRateFunction.H"
+#include "db/runTimeSelection/construction/addToRunTimeSelectionTable.H"
+#include "fields/surfaceFields/surfaceFields.H"
+
+// * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
+
+namespace Foam
+{
+namespace viscosityModels
+{
+    defineTypeNameAndDebug(strainRateFunction, 0);
+
+    addToRunTimeSelectionTable
+    (
+        viscosityModel,
+        strainRateFunction,
+        dictionary
+    );
+}
+}
+
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+Foam::viscosityModels::strainRateFunction::strainRateFunction
+(
+    const word& name,
+    const dictionary& viscosityProperties,
+    const volVectorField& U,
+    const surfaceScalarField& phi
+)
+:
+    viscosityModel(name, viscosityProperties, U, phi),
+    strainRateFunctionCoeffs_
+    (
+        viscosityProperties.optionalSubDict(typeName + "Coeffs")
+    ),
+    strainRateFunction_
+    (
+        Function1<scalar>::New("function", strainRateFunctionCoeffs_)
+    ),
+    nu_
+    (
+        IOobject
+        (
+            name,
+            U_.time().timeName(),
+            U_.db(),
+            IOobject::NO_READ,
+            IOobject::AUTO_WRITE
+        ),
+        U_.mesh(),
+        dimensionedScalar(name, dimViscosity, 0)
+    )
+{
+    correct();
+}
+
+
+// * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * * //
+
+Foam::tmp<Foam::volScalarField>
+Foam::viscosityModels::strainRateFunction::nu() const
+{
+    return nu_;
+}
+
+
+Foam::tmp<Foam::scalarField>
+Foam::viscosityModels::strainRateFunction::nu(const label patchi) const
+{
+    return nu_.boundaryField()[patchi];
+}
+
+
+void Foam::viscosityModels::strainRateFunction::correct()
+{
+    tmp<volScalarField> tsigma = strainRate();
+    const volScalarField& sigma = tsigma();
+
+    nu_.primitiveFieldRef() = strainRateFunction_->value(sigma());
+
+    volScalarField::Boundary& nuBf = nu_.boundaryFieldRef();
+    const volScalarField::Boundary& sigmaBf = sigma.boundaryField();
+
+    forAll(nuBf, patchi)
+    {
+        nuBf[patchi] = strainRateFunction_->value(sigmaBf[patchi]);
+    }
+}
+
+
+bool Foam::viscosityModels::strainRateFunction::read
+(
+    const dictionary& viscosityProperties
+)
+{
+    viscosityModel::read(viscosityProperties);
+
+    strainRateFunctionCoeffs_ = viscosityProperties.optionalSubDict
+    (
+        typeName + "Coeffs"
+    );
+
+    strainRateFunction_.clear();
+    strainRateFunction_ = Function1<scalar>::New
+    (
+        "function",
+        strainRateFunctionCoeffs_
+    );
+
+    return true;
+}
+
+
+// ************************************************************************* //

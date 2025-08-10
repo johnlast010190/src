@@ -1,0 +1,124 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2017-2018 OpenCFD Ltd.
+
+Class
+    Foam::vtk::legacyAsciiFormatter
+
+Description
+    Formatting as per Foam::vtk::asciiFormatter, but with
+    naming for legacy output.
+
+SourceFiles
+    foamVtkLegacyAsciiFormatter.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef foamVtkLegacyAsciiFormatter_H
+#define foamVtkLegacyAsciiFormatter_H
+
+#include "vtk/format/foamVtkAsciiFormatter.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+namespace vtk
+{
+
+/*---------------------------------------------------------------------------*\
+                  Class vtk::legacyAsciiFormatter Declaration
+\*---------------------------------------------------------------------------*/
+
+class legacyAsciiFormatter
+:
+    public asciiFormatter
+{
+    // Private Data Members
+
+        static const char* legacyName_;
+        static const outputOptions opts_;
+
+
+    // Private Member Functions
+
+        //- No copy construct
+        legacyAsciiFormatter(const legacyAsciiFormatter&) = delete;
+
+        //- No copy assignment
+        void operator=(const legacyAsciiFormatter&) = delete;
+
+
+public:
+
+    // Constructors
+
+        //- Construct and attach to an output stream, use default precision
+        legacyAsciiFormatter(std::ostream& os);
+
+        //- Construct and attach to an output stream, use specified precision
+        legacyAsciiFormatter(std::ostream& os, unsigned precision);
+
+
+    //- Destructor
+    virtual ~legacyAsciiFormatter() = default;
+
+
+    // Member Functions
+
+        //- The output is LEGACY_ASCII.
+        virtual const outputOptions& opts() const;
+
+        //- Name for the legacy ascii output type ("ASCII")
+        virtual const char* name() const;
+
+        //- Name for the XML append encoding (unused).
+        //  Currently identical to name(), but do not rely on this.
+        virtual const char* encoding() const;
+
+
+    // Disable some XML-only methods
+
+        inline virtual formatter& endTag(vtk::fileTag) { return *this; }
+        inline virtual formatter& endDataArray() { return *this; }
+        inline virtual formatter& endFieldData() { return *this; }
+        inline virtual formatter& endCellData() { return *this; }
+        inline virtual formatter& endPointData() { return *this; }
+        inline virtual formatter& endPiece() { return *this; }
+        inline virtual formatter& endVTKFile() { return *this; }
+
+};
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace vtk
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

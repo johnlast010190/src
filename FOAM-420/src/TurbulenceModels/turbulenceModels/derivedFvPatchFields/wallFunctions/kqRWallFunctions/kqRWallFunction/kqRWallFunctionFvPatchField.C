@@ -1,0 +1,142 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2015 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "kqRWallFunctionFvPatchField.H"
+#include "fields/fvPatchFields/fvPatchField/fvPatchFieldMapper.H"
+#include "db/runTimeSelection/construction/addToRunTimeSelectionTable.H"
+#include "fvMesh/fvPatches/derived/wall/wallFvPatch.H"
+
+// * * * * * * * * * * * * * Private Member Functions  * * * * * * * * * * * //
+
+template<class Type>
+void Foam::kqRWallFunctionFvPatchField<Type>::checkType()
+{
+    if (!isA<wallFvPatch>(this->patch()))
+    {
+        FatalErrorInFunction
+            << "Invalid wall function specification" << nl
+            << "    Patch type for patch " << this->patch().name()
+            << " must be wall" << nl
+            << "    Current patch type is " << this->patch().type()
+            << nl << endl
+            << abort(FatalError);
+    }
+}
+
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+template<class Type>
+Foam::kqRWallFunctionFvPatchField<Type>::kqRWallFunctionFvPatchField
+(
+    const fvPatch& p,
+    const DimensionedField<Type, volMesh>& iF
+)
+:
+    zeroGradientFvPatchField<Type>(p, iF)
+{
+    checkType();
+}
+
+
+template<class Type>
+Foam::kqRWallFunctionFvPatchField<Type>::kqRWallFunctionFvPatchField
+(
+    const fvPatch& p,
+    const DimensionedField<Type, volMesh>& iF,
+    const dictionary& dict
+)
+:
+    zeroGradientFvPatchField<Type>(p, iF, dict)
+{
+    checkType();
+}
+
+
+template<class Type>
+Foam::kqRWallFunctionFvPatchField<Type>::kqRWallFunctionFvPatchField
+(
+    const kqRWallFunctionFvPatchField& ptf,
+    const fvPatch& p,
+    const DimensionedField<Type, volMesh>& iF,
+    const fvPatchFieldMapper& mapper
+)
+:
+    zeroGradientFvPatchField<Type>(ptf, p, iF, mapper)
+{
+    checkType();
+}
+
+
+template<class Type>
+Foam::kqRWallFunctionFvPatchField<Type>::kqRWallFunctionFvPatchField
+(
+    const kqRWallFunctionFvPatchField& tkqrwfpf
+)
+:
+    zeroGradientFvPatchField<Type>(tkqrwfpf)
+{
+    checkType();
+}
+
+
+template<class Type>
+Foam::kqRWallFunctionFvPatchField<Type>::kqRWallFunctionFvPatchField
+(
+    const kqRWallFunctionFvPatchField& tkqrwfpf,
+    const DimensionedField<Type, volMesh>& iF
+)
+:
+    zeroGradientFvPatchField<Type>(tkqrwfpf, iF)
+{
+    checkType();
+}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+template<class Type>
+void Foam::kqRWallFunctionFvPatchField<Type>::evaluate
+(
+    const Pstream::commsTypes commsType
+)
+{
+    zeroGradientFvPatchField<Type>::evaluate(commsType);
+}
+
+
+template<class Type>
+void Foam::kqRWallFunctionFvPatchField<Type>::write(Ostream& os) const
+{
+    zeroGradientFvPatchField<Type>::write(os);
+    this->writeEntry("value", os);
+}
+
+
+// ************************************************************************* //

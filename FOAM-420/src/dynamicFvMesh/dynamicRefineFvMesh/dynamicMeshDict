@@ -1,0 +1,111 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2.2.2                                 |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      dynamicMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+//dynamicFvMeshLib   "libtopoChangerFvMesh.so";
+dynamicFvMesh      dynamicRefineFvMesh;
+//staticFvMesh;
+
+// Refinement
+dynamicRefineFvMeshCoeffs
+{
+    // Refine every refineInterval timesteps
+    refineInterval 3;
+
+    // Maximum refinement level (starts from 0)
+    maxRefinement 2;
+
+    // Maximum cell limit (approximate)
+    maxCells 1000000;
+
+    // volScalarField to base refinement on
+    field gamma;
+
+    // Which cells to un/refine: based on point values (simple averaging).
+    // - refine pointCells of point value inbetween minLevel..maxLevel
+    // - unrefine pointCells that are within nBufferLayers of points marked
+    //   for refinement.
+    minLevel 0.01;
+    maxLevel 0.99;
+    nBufferLayers 1;
+
+    // Newly introduced patch points optionally get projected onto a surface
+    //projectSurfaces ("fixedWalls4.stl");
+    //projectPatches (fixedWalls);
+    // Maximum project distance
+    //projectDistance 1;
+
+    // Fluxes to adapt. For newly created faces or split faces the flux
+    // gets estimated from an interpolated volVectorField ('velocity')
+    // First is name of the flux to adapt, second is velocity that will
+    // be interpolated and inner-producted with the face area vector.
+    correctFluxes ((phi U));
+
+// The following options are optional
+	// rebalance ever n refinement iterations (1 by default)
+    rebalanceInterval 3; 
+
+	// User specified decomposition method ptscotch by default
+	// ptscotch can cause some issues on rebalance, 
+	// hierarchical is more reliable
+	decompositionMethod hierarchical;
+
+	// coeffs and nprocessors in decomposition 
+	// must match number of processors that simulation is running on
+	hierarchicalCoeffs
+	{
+		n ( 2 2 2);
+		delta 0.001;
+		order yxz;
+	}
+
+	// prevents any refinment on all walls
+	// true by default
+	protectLayers true;
+
+	// switch to turn off correction of near wall 
+	// distance for turbulence models.  Old versions required this
+	// for wall functions, may save time to disable.
+	correctY true;
+
+	// allows user specified protection on patches e.g. inlets, 
+	// outlets or walls 
+	// can be blank, list patches, or be excluded
+	protectedPatches
+	(
+	);
+
+	// protects user specified cell zones to prevent over refinement
+	// can be blank, list cell zones, or be excluded
+	protectedCellZones
+	(
+	);
+
+	// max allowable load imbalance of any processor, set to zero to 
+	// turn off load balancing or remove entry entirely to prevent load balancing
+	maxLoadImbalance 0.1;
+
+	// start time of refinement in case user wants initial 
+	// development of solution
+	// greater than zero or excluded all together
+	refineStartTime 0.0;
+
+	// stop time of refinment in case a user wants to allow solution 
+	// to continue without a changing mesh
+	// must be larger than refineStartTime
+	refineStopTime 10;
+}
+
+// ************************************************************************* //

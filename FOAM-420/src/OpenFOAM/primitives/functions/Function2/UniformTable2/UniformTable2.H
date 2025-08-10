@@ -1,0 +1,186 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2020-2021 OpenFOAM Foundation
+    (c) 2022 Esi Ltd.
+
+Class
+    Foam::Function2s::UniformTable
+
+Description
+    Tabulated property function that linearly interpolates between
+    the uniformTable values.
+
+Usage
+    \table
+        Property    | Description
+        Tlow        | Lower temperature limit of the uniformTable
+        Thigh       | Upper temperature limit of the uniformTable
+        values      | Property values, assumed uniformly distributed
+    \endtable
+
+    Example for the density of water from 1 to 3bar and 280 to 350K
+    \verbatim
+    rho
+    {
+        type    uniformTable;
+
+        low     (1e5 280);
+        high    (3e5 350);
+
+        values
+        3 2
+        (
+            (991 992)
+            (993 994)
+            (995 996)
+        );
+    }
+
+    // Example without sub-dictionary
+    rho     uniformTable;
+    low     (0 0);
+    high    (1.5 5);
+    values
+    3 2
+    (
+        (991 992)
+        (993 994)
+        (995 996)
+    );
+    \endverbatim
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef UniformTable2_H
+#define UniformTable2_H
+
+#include "primitives/functions/Function2/Function2/Function2.H"
+#include "matrices/RectangularMatrix/RectangularMatrix.H"
+#include "primitives/Pair/Pair.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+namespace Function2s
+{
+
+/*---------------------------------------------------------------------------*\
+                            Class UniformTable Declaration
+\*---------------------------------------------------------------------------*/
+
+template<class Type>
+class UniformTable
+:
+    public FieldFunction2<Type, UniformTable<Type>>
+{
+    // Private member data
+
+        //- Lowest values in the table
+        Pair<scalar> low_;
+
+        //- Highest values in the table
+        Pair<scalar> high_;
+
+        //- Table values
+        RectangularMatrix<Type> values_;
+
+        //- x increment derived from low_, high_ and values_.m()
+        scalar deltax_;
+
+        //- y increment derived from low_, high_ and values_.n()
+        scalar deltay_;
+
+
+    // Private member functions
+
+        inline void checkRange
+        (
+            scalar x,
+            scalar ndx,
+            label ix,
+            scalar y,
+            scalar ndy,
+            label iy
+        ) const;
+
+
+public:
+
+    //- Runtime type information
+    TypeName("uniformTable");
+
+
+    // Constructors
+
+        //- Construct from name and dictionary
+        UniformTable(const word& name, const dictionary& dict);
+
+
+    // Member Functions
+
+        //- Return the non-uniform table of values
+        const RectangularMatrix<Type>& values() const
+        {
+            return values_;
+        }
+
+        //- Evaluate the function and return the result
+        virtual Type value(scalar x, scalar y) const;
+
+        //- Evaluate the derivative of the function w.r.t. p
+        Type dfdp(scalar p, scalar T) const;
+
+        //- Evaluate the derivative of the function w.r.t. T
+        Type dfdT(scalar p, scalar T) const;
+
+        //- Construct and return a clone
+        virtual tmp<Function2<Type>> clone() const
+        {
+            return tmp<Function2<Type>>(new UniformTable(*this));
+        }
+
+        //- Write the function coefficients
+        void writeData(Ostream& os) const;
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace Function2s
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#ifdef NoRepository
+    #include "primitives/functions/Function2/UniformTable2/UniformTable2.C"
+#endif
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

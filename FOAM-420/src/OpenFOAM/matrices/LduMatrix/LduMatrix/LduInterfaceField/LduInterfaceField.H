@@ -1,0 +1,140 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2016 OpenFOAM Foundation
+
+Class
+    Foam::LduInterfaceField
+
+Description
+    An abstract base class for implicitly-coupled interface fields
+    e.g. processor and cyclic patch fields.
+
+SourceFiles
+    LduInterfaceField.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef LduInterfaceField_H
+#define LduInterfaceField_H
+
+#include "matrices/lduMatrix/lduAddressing/lduInterfaceFields/lduInterfaceField/lduInterfaceField.H"
+#include "fields/Fields/primitiveFieldsFwd.H"
+#include "db/IOstreams/Pstreams/Pstream.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+class lduMatrix;
+
+/*---------------------------------------------------------------------------*\
+                     Class LduInterfaceField Declaration
+\*---------------------------------------------------------------------------*/
+
+template<class Type>
+class LduInterfaceField
+:
+    public lduInterfaceField
+{
+    // Private Member Functions
+
+        //- Disallow default bitwise copy construct
+        LduInterfaceField(const LduInterfaceField&);
+
+        //- Disallow default bitwise assignment
+        void operator=(const LduInterfaceField&);
+
+
+public:
+
+    //- Runtime type information
+    TypeName("LduInterfaceField");
+
+
+    // Constructors
+
+        //- Construct given coupled patch
+        LduInterfaceField(const lduInterface& patch)
+        :
+            lduInterfaceField(patch)
+        {}
+
+
+    //- Destructor
+    virtual ~LduInterfaceField();
+
+
+    // Member Functions
+
+        // Coupled interface functionality
+
+            //- Inherit initInterfaceMatrixUpdate from lduInterfaceField
+            using lduInterfaceField::initInterfaceMatrixUpdate;
+
+            //- Initialise neighbour matrix update
+            virtual void initInterfaceMatrixUpdate
+            (
+                Field<Type>&,
+                const bool add,
+                const Field<Type>&,
+                const scalarField&,
+                const Pstream::commsTypes commsType
+            ) const
+            {}
+
+            //- Inherit updateInterfaceMatrix from lduInterfaceField
+            using lduInterfaceField::updateInterfaceMatrix;
+
+            //- Update result field based on interface functionality
+            virtual void updateInterfaceMatrix
+            (
+                Field<Type>&,
+                const bool add,
+                const Field<Type>&,
+                const scalarField&,
+                const Pstream::commsTypes commsType
+            ) const = 0;
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#ifdef NoRepository
+    #include "matrices/LduMatrix/LduMatrix/LduInterfaceField/LduInterfaceField.C"
+#endif
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

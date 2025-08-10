@@ -1,0 +1,28 @@
+#define IDR_VERSION1 1
+
+IDR_VERSION1 VERSIONINFO
+FILEVERSION 3,1,2,0
+PRODUCTVERSION 3,1,2,0
+FILEOS 0x00000000
+FILETYPE 0x00000000
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "FFFF0000"
+    BEGIN
+      VALUE "CompanyName", "ESI (R)\0"
+      VALUE "FileVersion", "3.1.2.0\0" //do not change this
+      VALUE "ProductVersion", "3.1.2.0\0" //do not change this
+      VALUE "FileDescription", "tmpintname - Part of FOAM, built by ESI Ltd.\0"
+      VALUE "LegalCopyright", "OpenFOAM is Copyright (C) 2011-17 OpenFOAM Foundation.\0"
+      VALUE "LegalTrademarks", "FOAM and ESI are registered tradmarks of ESI Ltd. OpenFOAM is a trade mark of OpenCFD (ESI Group).\0"
+      VALUE "ProductName", "FOAM CORE\0"
+      VALUE "InternalName", "tmpintname\0"
+      VALUE "OriginalFilename", "tmporigname\0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0xFFFF, 0x0000
+  END
+END

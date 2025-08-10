@@ -1,0 +1,271 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2010-2012 Esi Ltd.
+    (c) 2011-2013 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "trackedParticle/trackedParticle.H"
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+Foam::trackedParticle::trackedParticle
+(
+    const polyMesh& mesh,
+    const vector& position,
+    const label celli,
+    const label tetFacei,
+    const label tetPtI,
+    const point& end,
+    const label level,
+    const label i,
+    const label j
+)
+:
+    particle(mesh, position, celli, tetFacei, tetPtI),
+    end_(end),
+    level_(level),
+    i_(i),
+    j_(j),
+    onPatch_(false),
+    onFtr_(false)
+{}
+
+
+Foam::trackedParticle::trackedParticle
+(
+    const polyMesh& mesh,
+    Istream& is,
+    bool readFields
+)
+:
+    particle(mesh, is, readFields)
+{
+    if (readFields)
+    {
+        if (is.format() == IOstream::ASCII)
+        {
+            is >> end_;
+            level_ = readLabel(is);
+            i_ = readLabel(is);
+            j_ = readLabel(is);
+            onPatch_ = readBool(is);
+            onFtr_ = readBool(is);
+        }
+        else
+        {
+            is.read
+            (
+                reinterpret_cast<char*>(&end_),
+                sizeof(end_) + sizeof(level_) + sizeof(i_) + sizeof(j_)
+                + sizeof(onPatch_) + sizeof(onFtr_)
+            );
+        }
+    }
+
+    is.check(FUNCTION_NAME);
+}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+bool Foam::trackedParticle::move
+(
+    trackingData& td,
+    const scalar trackTime
+)
+{
+    td.switchProcessor = false;
+    td.keepParticle = true;
+
+    scalar tEnd = (1.0 - stepFraction())*trackTime;
+    scalar dtMax = tEnd;
+    label patchCount = 0;
+
+    while (td.keepParticle && !td.switchProcessor && tEnd > SMALL)
+    {
+        // set the lagrangian time-step
+        scalar dt = min(dtMax, tEnd);
+
+        // mark visited cell with max level.
+        if (!onPatch() && onFtr())
+        {
+            td.maxLevel()[cell()] = max(td.maxLevel()[cell()], level_);
+        }
+        else if (onPatch())
+        {
+            patchCount++;
+        }
+
+        label initialFaceI = this->face();
+
+        dt *= trackToFace(end_, td);
+
+        tEnd -= dt;
+        stepFraction() = 1.0 - tEnd/trackTime;
+
+        if (onPatch() && ((initialFaceI == this->face()) || dt < 1e-12 || patchCount > 100))
+        {
+            break;
+        }
+    }
+
+    if (stepFraction() > 1 - SMALL)
+    {
+        onFtr() = true;
+        onPatch() = false;
+    }
+
+    return td.keepParticle;
+}
+
+
+bool Foam::trackedParticle::hitPatch
+(
+    const polyPatch&,
+    trackingData& td,
+    const label patchi,
+    const scalar trackFraction,
+    const tetIndices& tetIs
+)
+{
+    return false;
+}
+
+
+void Foam::trackedParticle::hitWedgePatch
+(
+    const wedgePolyPatch&,
+    trackingData& td
+)
+{
+    // Remove particle
+    td.keepParticle = false;
+}
+
+
+void Foam::trackedParticle::hitSymmetryPlanePatch
+(
+    const symmetryPlanePolyPatch&,
+    trackingData& td
+)
+{
+    // Remove particle
+    td.keepParticle = false;
+}
+
+
+void Foam::trackedParticle::hitSymmetryPatch
+(
+    const symmetryPolyPatch&,
+    trackingData& td
+)
+{
+    // Remove particle
+    td.keepParticle = true;
+    onPatch() = true;
+}
+
+
+void Foam::trackedParticle::hitCyclicPatch
+(
+    const cyclicPolyPatch&,
+    trackingData& td
+)
+{
+    // Remove particle
+    td.keepParticle = false;
+}
+
+
+void Foam::trackedParticle::hitProcessorPatch
+(
+    const processorPolyPatch&,
+    trackingData& td
+)
+{
+    // Move to different processor
+    td.switchProcessor = true;
+}
+
+
+void Foam::trackedParticle::hitWallPatch
+(
+    const wallPolyPatch& wpp,
+    trackingData& td,
+    const tetIndices&
+)
+{
+    // Remove particle
+    td.keepParticle = true;
+    onPatch() = true;
+}
+
+
+void Foam::trackedParticle::hitPatch
+(
+    const polyPatch& wpp,
+    trackingData& td
+)
+{
+    // Remove particle
+    td.keepParticle = true;
+    onPatch() = true;
+}
+
+
+// * * * * * * * * * * * * * * * IOstream Operators  * * * * * * * * * * * * //
+
+Foam::Ostream& Foam::operator<<(Ostream& os, const trackedParticle& p)
+{
+    if (os.format() == IOstream::ASCII)
+    {
+        os  << static_cast<const particle&>(p)
+            << token::SPACE << p.end_
+            << token::SPACE << p.level_
+            << token::SPACE << p.i_
+            << token::SPACE << p.j_
+            << token::SPACE << p.onPatch_
+            << token::SPACE << p.onFtr_;
+    }
+    else
+    {
+        os  << static_cast<const particle&>(p);
+        os.write
+        (
+            reinterpret_cast<const char*>(&p.end_),
+            sizeof(p.end_) + sizeof(p.level_) + sizeof(p.i_) + sizeof(p.j_)
+            + sizeof(p.onPatch_) + sizeof(p.onFtr_)
+
+        );
+    }
+
+    os.check(FUNCTION_NAME);
+    return os;
+}
+
+
+// ************************************************************************* //

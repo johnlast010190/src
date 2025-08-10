@@ -1,0 +1,32 @@
+FoamFile
+{
+    version         2.0;
+    format          ascii;
+
+    root            "";
+    case            "cavity";
+    instance        "system";
+    local           "";
+
+    class           dictionary;
+    object          stretchMeshDict;
+}
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+transforms
+(
+    {
+        basePoint (0 0 0);
+        stretchDirection (1 0 0);
+        initialLength 2;
+        stretchLength 10;
+
+        expansionRatio 1.2; // must be > 1
+        delta 0.01; //typical base cell size in stretch region
+
+        symmetric false;//true; //default true, set to false for e.g. stretched inlet
+    }
+);
+
+// ************************************************************************* //

@@ -1,0 +1,113 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2016 OpenFOAM Foundation
+
+Class
+    Foam::compositeBody
+
+Group
+    grpRigidBodyDynamicsBodies
+
+Description
+    This specialized rigidBody holds the original body after it has been merged
+    into a parent.
+
+SourceFiles
+    compositeBodyI.H
+    compositeBody.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef RBD_compositeBody_H
+#define RBD_compositeBody_H
+
+#include "bodies/rigidBody/rigidBody.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+namespace RBD
+{
+
+/*---------------------------------------------------------------------------*\
+                         Class compositeBody Declaration
+\*---------------------------------------------------------------------------*/
+
+class compositeBody
+:
+    public rigidBody
+{
+    // Private data
+
+        //- Original body from which this composite-body was constructed
+        autoPtr<rigidBody> body_;
+
+public:
+
+    // Constructors
+
+        //- Construct a merged version of the given rigidBody
+        //  providing the ID of the parent body to which this will be merged
+        //  and the transform relative to the parent
+        inline compositeBody(const autoPtr<rigidBody>& bodyPtr);
+
+        //- Return clone of this compositeBody
+        virtual autoPtr<rigidBody> clone() const;
+
+
+    //- Destructor
+    virtual ~compositeBody();
+
+
+    // Member Functions
+
+        //- Return the type name of the original body
+        virtual const word& type() const;
+
+        //- Return the original body from which this composite-body
+        //  was constructed
+        inline const rigidBody& body() const;
+
+        //- Write
+        virtual void write(Ostream&) const;
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace RBD
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#include "bodies/compositeBody/compositeBodyI.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

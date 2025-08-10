@@ -1,0 +1,132 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2016 OpenFOAM Foundation
+
+Primitive
+    bool
+
+Description
+    System bool
+
+SourceFiles
+    boolIO.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef bool_H
+#define bool_H
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+
+class Istream;
+class Ostream;
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+Istream& operator>>(Istream& is, bool& b);
+Ostream& operator<<(Ostream& os, const bool b);
+
+bool readBool(Istream& is);
+
+} // End namespace Foam
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#include "primitives/pTraits/pTraits.H"
+#include "primitives/direction/direction.H"
+
+namespace Foam
+{
+
+// Template specialisation for pTraits<bool>
+template<>
+class pTraits<bool>
+{
+    bool p_;
+
+public:
+
+    //- Component type
+    typedef bool cmptType;
+
+    // Member constants
+
+        //- Dimensionality of space
+        static const direction dim = 3;
+
+        //- Rank of bool is 0
+        static const direction rank = 0;
+
+        //- Number of components in bool is 1
+        static const direction nComponents = 1;
+
+
+    // Static data members
+
+        static const char* const typeName;
+        static const char* const componentNames[];
+        static const bool zero;
+        static const bool one;
+
+
+    // Constructors
+
+        //- Construct from primitive
+        explicit pTraits(const bool& p);
+
+        //- Construct from Istream
+        pTraits(Istream& is);
+
+
+    // Member Functions
+
+        //- Access to the bool value
+        operator bool() const
+        {
+            return p_;
+        }
+
+        //- Access to the bool value
+        operator bool&()
+        {
+            return p_;
+        }
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

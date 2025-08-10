@@ -1,0 +1,23 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      TBBbenchDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+//export LD_PRELOAD=~/ThirdParty-dev/platforms/linux64Clang/oneTBB-v2021.3.0/lib64/libtbbmalloc_proxy.so.2
+
+sourceCase      "../";
+
+sourceTime      latestTime;//<scalar>|latestTime //optional, default latestTime
+
+fields          (p U);
+
+// run benchMark with these number of threads
+threads        4(1 2 3 4);
+
+grainSize      3(1e3 5e3 1e4);
+
+// ************************************************************************* //

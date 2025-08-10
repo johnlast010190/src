@@ -1,0 +1,322 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) Creative Fields, Ltd.
+
+Authors
+    Franjo Juretic (franjo.juretic@c-fields.com)
+
+Class
+    polyMeshGenChecks
+
+Description
+    A set of functions used for mesh checking mesh quality
+
+SourceFiles
+    polyMeshGenAddressingChecks.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef polyMeshGenChecks_H
+#define polyMeshGenChecks_H
+
+#include "utilities/meshes/polyMeshGen/polyMeshGen.H"
+#include "primitives/bools/lists/boolList.H"
+#include "containers/HashTables/HashSet/HashSet.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+
+/*---------------------------------------------------------------------------*\
+            Namespace polyMeshGenChecks functions Declaration
+\*---------------------------------------------------------------------------*/
+
+namespace polyMeshGenChecks
+{
+
+// Check geometry
+//- Check boundary closedness
+bool checkClosedBoundary(const polyMeshGen&, const bool report = false);
+
+//- Check cells for closedness
+bool checkClosedCells
+(
+    const polyMeshGen&,
+    const bool report = false,
+    const scalar aspectWarn = 1000,
+    labelHashSet* setPtr = nullptr
+);
+
+//- Check for negative cell volumes
+bool checkCellVolumes
+(
+    const polyMeshGen&,
+    const bool report = false,
+    labelHashSet* setPtr = nullptr
+);
+
+//- Check for negative cell volumes and return error faces
+bool checkCellVolumes
+(
+    const polyMeshGen& mesh,
+    const bool report,
+    labelHashSet* setPtr,
+    const boolList* changedFacePtr
+);
+
+//- Check for negative face areas
+bool checkFaceAreas
+(
+    const polyMeshGen&,
+    const bool report = false,
+    const scalar minFaceArea = VSMALL,
+    labelHashSet* setPtr = nullptr,
+    const boolList* changedFacePtr = nullptr
+);
+
+//- Check for negative part tetrahedra
+//- Cells are decomposed into tetrahedra formed by
+//- the cell centre, face centre and the edge vertices
+bool checkCellPartTetrahedra
+(
+    const polyMeshGen&,
+    const bool report = false,
+    const scalar minPartTet = VSMALL,
+    labelHashSet* setPtr = nullptr,
+    const boolList* changedFacePtr = nullptr
+);
+
+//- Check for non-orthogonality
+void checkFaceDotProduct
+(
+    const polyMeshGen&,
+    scalarField&,
+    const boolList* changedFacePtr = nullptr
+);
+
+bool checkFaceDotProduct
+(
+    const polyMeshGen&,
+    const bool report = false,
+    const scalar nonOrthWarn = 70.0,
+    labelHashSet* setPtr = nullptr,
+    const boolList* changedFacePtr = nullptr
+);
+
+//- Check face pyramid volume
+bool checkFacePyramids
+(
+    const polyMeshGen&,
+    const bool report = false,
+    const scalar minPyrVol = -SMALL,
+    labelHashSet* setPtr = nullptr,
+    const boolList* changedFacePtr = nullptr
+);
+
+//- Check face skewness
+void checkFaceSkewness
+(
+    const polyMeshGen&,
+    scalarField&,
+    const boolList* changedFacePtr = nullptr
+);
+
+bool checkFaceSkewness
+(
+    const polyMeshGen&,
+    const bool report = false,
+    const scalar warnSkew = 4.0,
+    labelHashSet* setPtr = nullptr,
+    const boolList* changedFacePtr = nullptr
+);
+
+//- Check face uniformity
+void checkFaceUniformity
+(
+    const polyMeshGen&,
+    scalarField&,
+    const boolList* changedFacePtr = nullptr
+);
+
+bool checkFaceUniformity
+(
+    const polyMeshGen&,
+    const bool report = false,
+    const scalar warnUniform = 0.1,
+    labelHashSet* setPtr = nullptr,
+    const boolList* changedFacePtr = nullptr
+);
+
+//- check volume difference of neighbouring cells
+void checkVolumeUniformity
+(
+    const polyMeshGen&,
+    scalarField&,
+    const boolList* changedFacePtr = nullptr
+);
+
+bool checkVolumeUniformity
+(
+    const polyMeshGen&,
+    const bool report = false,
+    const scalar warnUniform = 0.1,
+    labelHashSet* setPtr = nullptr,
+    const boolList* changedFacePtr = nullptr
+);
+
+//- Check face angles
+bool checkFaceAngles
+(
+    const polyMeshGen&,
+    const bool report = false,
+    const scalar maxDeg = 10,    // In degrees
+    labelHashSet* setPtr = nullptr,
+    const boolList* changedFacePtr = nullptr
+);
+
+//- Check face warpage: decompose face and check ratio between
+//  magnitude of sum of triangle areas and sum of magnitude of
+//  triangle areas.
+bool checkFaceFlatness
+(
+    const polyMeshGen&,
+    const bool report,
+    const scalar warnFlatness,  // When to include in set.
+    labelHashSet* setPtr = nullptr,
+    const boolList* changedFacePtr = nullptr
+);
+
+// Checks using topology only
+
+//- Check for unused points
+bool checkPoints
+(
+    const polyMeshGen&,
+    const bool report = false,
+    labelHashSet* setPtr = nullptr
+);
+
+//- Check face ordering
+bool checkUpperTriangular
+(
+    const polyMeshGen&,
+    const bool report = false,
+    labelHashSet* setPtr = nullptr
+);
+
+//- Check cell zip-up
+bool checkCellsZipUp
+(
+    const polyMeshGen&,
+    const bool report = false,
+    labelHashSet* setPtr = nullptr
+);
+
+//- Check uniqueness of face vertices
+bool checkFaceVertices
+(
+    const polyMeshGen&,
+    const bool report = false,
+    labelHashSet* setPtr = nullptr
+);
+
+//- Check mesh topology for correctness. Returns false for no error.
+bool checkTopology(const polyMeshGen&, const bool report = false);
+
+//- Check mesh geometry (& implicitly topology) for correctness.
+//  Returns false for no error.
+bool checkGeometry(const polyMeshGen&, const bool report = false);
+
+//- Check mesh for correctness. Returns false for no error.
+bool checkMesh(const polyMeshGen&, const bool report = false);
+
+//- checks for bad faces making the mesh unusable
+//- checks for negative pyramids and zero area faces
+label findBadFacesRelaxed
+(
+    const polyMeshGen&,
+    const scalar minFaceArea,
+    labelHashSet& badFaces,
+    const bool report = false,
+    const boolList* activeFacePtr = nullptr
+);
+
+//- check mesh for bad faces which make the mesh invalid
+//- checks for negative pyramids, face flatness,
+//- zero area faces and negative tetrahedra
+label findBadFaces
+(
+    const polyMeshGen&,
+    const bool checkWarped,
+    const scalar minFaceArea,
+    labelHashSet& badFaces,
+    label& nCriticalErrors,
+    const bool report = false,
+    const boolList* activeFacePtr = nullptr
+);
+
+//- check mesh for faces that may cause problems to the solver
+//- checks for non-orthogonality and skewness
+label findLowQualityFaces
+(
+    const polyMeshGen& mesh,
+    labelHashSet& badFaces,
+    const bool report = false,
+    const boolList* activeFacePtr = nullptr
+);
+
+//- checks the mesh and selects the faces with worst quality
+label findWorstQualityFaces
+(
+    const polyMeshGen& mesh,
+    labelHashSet& badFaces,
+    const bool report = false,
+    const boolList* activeFacePtr = nullptr,
+    const scalar relativeThreshold = 0.1
+);
+
+//- checks the mesh and selects the faces with high orthogonality
+label findHighOrthogonalityFaces
+(
+    const polyMeshGen& mesh,
+    labelHashSet& badFaces,
+    const bool report = false,
+    const boolList* activeFacePtr = nullptr,
+    const scalar orthogonalityThreshold = 0.342
+);
+
+}
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

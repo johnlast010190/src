@@ -1,0 +1,118 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2013-2016 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "sixDoFRigidBodyMotion/restraints/sphericalAngularDamper/sphericalAngularDamper.H"
+#include "db/runTimeSelection/construction/addToRunTimeSelectionTable.H"
+#include "sixDoFRigidBodyMotion/sixDoFRigidBodyMotion.H"
+
+// * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
+
+namespace Foam
+{
+namespace sixDoFRigidBodyMotionRestraints
+{
+    defineTypeNameAndDebug(sphericalAngularDamper, 0);
+
+    addToRunTimeSelectionTable
+    (
+        sixDoFRigidBodyMotionRestraint,
+        sphericalAngularDamper,
+        dictionary
+    );
+}
+}
+
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+Foam::sixDoFRigidBodyMotionRestraints::sphericalAngularDamper::
+sphericalAngularDamper
+(
+    const word& name,
+    const dictionary& sDoFRBMRDict
+)
+:
+    sixDoFRigidBodyMotionRestraint(name, sDoFRBMRDict),
+    coeff_()
+{
+    read(sDoFRBMRDict);
+}
+
+
+// * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * * //
+
+Foam::sixDoFRigidBodyMotionRestraints::sphericalAngularDamper::
+~sphericalAngularDamper()
+{}
+
+
+// * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * * //
+
+void Foam::sixDoFRigidBodyMotionRestraints::sphericalAngularDamper::restrain
+(
+    const sixDoFRigidBodyMotion& motion,
+    vector& restraintPosition,
+    vector& restraintForce,
+    vector& restraintMoment
+) const
+{
+    restraintMoment = -coeff_*motion.omega();
+    restraintForce = Zero;
+
+    if (motion.report())
+    {
+        Info<< " moment " << restraintMoment
+            << endl;
+    }
+}
+
+
+bool Foam::sixDoFRigidBodyMotionRestraints::sphericalAngularDamper::read
+(
+    const dictionary& sDoFRBMRDict
+)
+{
+    sixDoFRigidBodyMotionRestraint::read(sDoFRBMRDict);
+
+    sDoFRBMRCoeffs_.lookup("coeff") >> coeff_;
+
+    return true;
+}
+
+
+void Foam::sixDoFRigidBodyMotionRestraints::sphericalAngularDamper::write
+(
+    Ostream& os
+) const
+{
+    os.writeEntry("coeff", coeff_);
+}
+
+
+// ************************************************************************* //

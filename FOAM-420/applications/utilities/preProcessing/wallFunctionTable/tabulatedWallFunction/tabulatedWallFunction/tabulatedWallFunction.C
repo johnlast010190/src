@@ -1,0 +1,90 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2017 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "tabulatedWallFunction.H"
+#include "db/Time/Time.H"
+
+// * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
+
+namespace Foam
+{
+    namespace tabulatedWallFunctions
+    {
+        defineTypeNameAndDebug(tabulatedWallFunction, 0);
+        defineRunTimeSelectionTable(tabulatedWallFunction, dictionary);
+    }
+}
+
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+Foam::tabulatedWallFunctions::tabulatedWallFunction::tabulatedWallFunction
+(
+    const dictionary& dict,
+    const polyMesh& mesh,
+    const word& name
+)
+:
+    dict_(dict),
+    mesh_(mesh),
+    coeffDict_(dict.optionalSubDict(name + "Coeffs")),
+    invertedTableName_(dict.lookup("invertedTableName")),
+    invertedTable_(invertedTableName_, mesh_, dict, true)
+{}
+
+
+// * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * * //
+
+Foam::tabulatedWallFunctions::tabulatedWallFunction::~tabulatedWallFunction()
+{}
+
+
+// * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * * //
+
+void Foam::tabulatedWallFunctions::tabulatedWallFunction::write()
+{
+    if (invertedTable_.log10())
+    {
+        invertedTable_.note() =
+            "U+ as a function of log10(Re) computed using " + type();
+    }
+    else
+    {
+        invertedTable_.note() =
+            "U+ as a function of Re computed using " + type();
+    }
+
+    Info<< "Writing inverted table to\n    " << invertedTable_.objectPath()
+        << endl;
+
+    invertedTable_.write();
+}
+
+
+// ************************************************************************* //

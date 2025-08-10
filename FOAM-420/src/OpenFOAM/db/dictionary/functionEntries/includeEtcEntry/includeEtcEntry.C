@@ -1,0 +1,205 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2017 Esi Ltd.
+    (c) 2015-2017 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "db/dictionary/functionEntries/includeEtcEntry/includeEtcEntry.H"
+#include "global/etcFiles/etcFiles.H"
+#include "primitives/strings/stringOps/stringOps.H"
+#include "db/runTimeSelection/memberFunctions/addToMemberFunctionSelectionTable.H"
+#include "db/IOstreams/IOstreams.H"
+#include "global/fileOperations/fileOperation/fileOperation.H"
+
+// * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
+
+bool Foam::functionEntries::includeEtcEntry::log(false);
+
+
+namespace Foam
+{
+namespace functionEntries
+{
+    addNamedToMemberFunctionSelectionTable
+    (
+        functionEntry,
+        includeEtcEntry,
+        execute,
+        dictionaryIstream,
+        includeEtc
+    );
+
+    addNamedToMemberFunctionSelectionTable
+    (
+        functionEntry,
+        includeEtcEntry,
+        execute,
+        primitiveEntryIstream,
+        includeEtc
+    );
+}
+}
+
+// * * * * * * * * * * * Protected Member Functions  * * * * * * * * * * * * //
+
+Foam::fileName Foam::functionEntries::includeEtcEntry::resolveFile
+(
+    const fileName& f,
+    const dictionary& dict
+)
+{
+    fileName fName(f);
+
+    // Substitute dictionary and environment variables.
+    // Allow empty substitutions.
+    stringOps::inplaceExpand(fName, dict, true, true);
+
+    if (fName.empty() || fName.isAbsolute())
+    {
+        return fName;
+    }
+
+    // Search the etc directories for the file
+    return Foam::findEtcFile(fName);
+}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+bool Foam::functionEntries::includeEtcEntry::mergeFile
+(
+    dictionary& parentDict,
+    fileName rawFName
+)
+{
+
+    const fileName fName(resolveFile(rawFName, parentDict));
+
+    //IFstream ifs(fName);
+    autoPtr<ISstream> ifsPtr(fileHandler().NewIFstream(fName));
+    ISstream& ifs = ifsPtr();
+
+    if (ifs)
+    {
+        if (Foam::functionEntries::includeEtcEntry::log)
+        {
+            Info<< fName << endl;
+        }
+        parentDict.read(ifs);
+        return true;
+    }
+    else
+    {
+        FatalIOErrorInFunction
+        (
+            ifs
+        )   << "Cannot open include file "
+            << (ifs.name().size() ? ifs.name() : rawFName)
+            << " while reading dictionary " << parentDict.name()
+            << exit(FatalIOError);
+
+        return false;
+    }
+}
+
+
+bool Foam::functionEntries::includeEtcEntry::execute
+(
+    dictionary& parentDict,
+    Istream& is
+)
+{
+    const fileName rawName(is);
+    const fileName fName(resolveFile(rawName, parentDict));
+
+    //IFstream ifs(fName);
+    autoPtr<ISstream> ifsPtr(fileHandler().NewIFstream(fName));
+    ISstream& ifs = ifsPtr();
+
+    if (ifs)
+    {
+        if (Foam::functionEntries::includeEtcEntry::log)
+        {
+            Info<< fName << endl;
+        }
+        parentDict.read(ifs);
+        return true;
+    }
+    else
+    {
+        FatalIOErrorInFunction
+        (
+            is
+        )   << "Cannot open etc file "
+            << (ifs.name().size() ? ifs.name() : rawName)
+            << " while reading dictionary " << parentDict.name()
+            << exit(FatalIOError);
+
+        return false;
+    }
+}
+
+
+bool Foam::functionEntries::includeEtcEntry::execute
+(
+    const dictionary& parentDict,
+    primitiveEntry& entry,
+    Istream& is
+)
+{
+    const fileName rawName(is);
+    const fileName fName(resolveFile(rawName, parentDict));
+
+    //IFstream ifs(fName);
+    autoPtr<ISstream> ifsPtr(fileHandler().NewIFstream(fName));
+    ISstream& ifs = ifsPtr();
+
+    if (ifs)
+    {
+        if (Foam::functionEntries::includeEtcEntry::log)
+        {
+            Info<< fName << endl;
+        }
+        entry.read(parentDict, ifs);
+        return true;
+    }
+    else
+    {
+        FatalIOErrorInFunction
+        (
+            is
+        )   << "Cannot open etc file "
+            << (ifs.name().size() ? ifs.name() : rawName)
+            << " while reading dictionary " << parentDict.name()
+            << exit(FatalIOError);
+
+        return false;
+    }
+}
+
+
+// ************************************************************************* //

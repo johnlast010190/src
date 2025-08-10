@@ -1,0 +1,118 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2013 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "meshes/Identifiers/patch/patchIdentifier.H"
+#include "db/dictionary/dictionary.H"
+#include "containers/Lists/ListOps/ListOps.H"
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+Foam::patchIdentifier::patchIdentifier
+(
+    const word& name,
+    const label index,
+    const word& physicalType,
+    const wordList& inGroups
+)
+:
+    name_(name),
+    index_(index),
+    physicalType_(physicalType),
+    inGroups_(inGroups)
+{}
+
+
+Foam::patchIdentifier::patchIdentifier
+(
+    const word& name,
+    const dictionary& dict,
+    const label index
+)
+:
+    name_(name),
+    index_(index)
+{
+    dict.readIfPresent("physicalType", physicalType_);
+    dict.readIfPresent("inGroups", inGroups_);
+}
+
+
+Foam::patchIdentifier::patchIdentifier
+(
+    const patchIdentifier& p,
+    const label index
+)
+:
+    name_(p.name_),
+    index_(index),
+    physicalType_(p.physicalType_),
+    inGroups_(p.inGroups_)
+{}
+
+
+// * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * * //
+
+Foam::patchIdentifier::~patchIdentifier()
+{}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+bool Foam::patchIdentifier::inGroup(const word& name) const
+{
+    return findIndex(inGroups_, name) != -1;
+}
+
+
+void Foam::patchIdentifier::write(Ostream& os) const
+{
+    if (physicalType_.size())
+    {
+        os.writeEntry("physicalType", physicalType_);
+    }
+    if (inGroups_.size())
+    {
+        os.writeKeyword("inGroups");
+        // Write list with flatOutput
+        inGroups_.writeList(os, 0) << token::END_STATEMENT << nl;
+    }
+}
+
+
+// * * * * * * * * * * * * * * * Friend Operators  * * * * * * * * * * * * * //
+
+Foam::Ostream& Foam::operator<<(Ostream& os, const patchIdentifier& p)
+{
+    p.write(os);
+    os.check(FUNCTION_NAME);
+    return os;
+}
+
+
+// ************************************************************************* //

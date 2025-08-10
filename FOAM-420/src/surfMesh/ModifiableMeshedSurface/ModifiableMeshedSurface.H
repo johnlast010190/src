@@ -1,0 +1,111 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2016-2019 OpenCFD Ltd.
+
+Class
+    Foam::ModifiableMeshedSurface
+
+Description
+    A special purpose MeshedSurface that exposes the stored values
+    for direct modification.
+
+    Its usage should be restricted to special cases where the surface
+    needs modifications as an atomic operation.
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef ModifiableMeshedSurface_H
+#define ModifiableMeshedSurface_H
+
+#include "MeshedSurface/MeshedSurface.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+
+/*---------------------------------------------------------------------------*\
+                   Class ModifiableMeshedSurface Declaration
+\*---------------------------------------------------------------------------*/
+
+template<class Face>
+class ModifiableMeshedSurface
+:
+    public MeshedSurface<Face>
+{
+    // Private Member Functions
+
+        //- Disallow default bitwise copy construct
+        ModifiableMeshedSurface(const ModifiableMeshedSurface<Face>&) = delete;
+
+        //- Disallow default bitwise assignment
+        void operator=(const ModifiableMeshedSurface<Face>&) = delete;
+
+
+public:
+
+    // Constructors
+
+        //- Construct null, use reset/transfer to adjust contents
+        ModifiableMeshedSurface()
+        :
+            MeshedSurface<Face>()
+        {}
+
+
+        //- Construct by transferring the contents from a MeshedSurface
+        explicit ModifiableMeshedSurface(MeshedSurface<Face>&& surf)
+        :
+            MeshedSurface<Face>(std::move(surf))
+        {}
+
+
+    //- Destructor
+    virtual ~ModifiableMeshedSurface()
+    {}
+
+
+    // Member Functions
+
+        // Edit
+
+            // Expose protected methods
+            using MeshedSurface<Face>::storedFaces;
+            using MeshedSurface<Face>::storedPoints;
+            using MeshedSurface<Face>::storedZones;
+
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

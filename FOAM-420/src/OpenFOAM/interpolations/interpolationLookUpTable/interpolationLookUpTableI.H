@@ -1,0 +1,96 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+template<class Type>
+inline Foam::label
+Foam::interpolationLookUpTable<Type>::findFieldIndex
+(
+    const word& fieldName
+) const
+{
+    return fieldIndices_[fieldName];
+}
+
+
+template<class Type>
+inline const Foam::List<Foam::dictionary>&
+Foam::interpolationLookUpTable<Type>::output() const
+{
+    return output_;
+}
+
+
+template<class Type>
+inline const Foam::List<Foam::dictionary>&
+Foam::interpolationLookUpTable<Type>::entries() const
+{
+    return entries_;
+}
+
+
+template<class Type>
+inline const Foam::List<Foam::scalar>&
+Foam::interpolationLookUpTable<Type>::min() const
+{
+    return min_;
+}
+
+
+template<class Type>
+inline const Foam::List<Foam::label>&
+Foam::interpolationLookUpTable<Type>::dim() const
+{
+    return dim_;
+}
+
+
+template<class Type>
+inline const Foam::List<Foam::scalar>&
+Foam::interpolationLookUpTable<Type>::delta() const
+{
+    return delta_;
+}
+
+
+template<class Type>
+inline const Foam::List<Foam::scalar>&
+Foam::interpolationLookUpTable<Type>::max() const
+{
+    return max_;
+}
+
+
+template<class Type>
+inline Foam::word Foam::interpolationLookUpTable<Type>::tableName() const
+{
+    return fileName_.name();
+}
+
+
+// ************************************************************************* //

@@ -1,0 +1,540 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2016 OpenFOAM Foundation
+    (c) 2016-2018 OpenCFD Ltd.
+    (c) 2010-2022 Esi Ltd.
+
+Class
+    Foam::PrimitivePatch
+
+Description
+    A list of faces which address into the list of points.
+
+    The class is templated on the face type (e.g. triangle, polygon etc.)
+    and on the list type of faces and points so that it can refer to
+    existing lists using UList and const pointField& or hold the storage
+    using List and pointField.
+
+SourceFiles
+    PrimitivePatchAddressing.C
+    PrimitivePatchBdryPoints.C
+    PrimitivePatch.C
+    PrimitivePatchCheck.C
+    PrimitivePatchClear.C
+    PrimitivePatchEdgeLoops.C
+    PrimitivePatchLocalPointOrder.C
+    PrimitivePatchMeshData.C
+    PrimitivePatchMeshEdges.C
+    PrimitivePatchName.C
+    PrimitivePatchPointAddressing.C
+    PrimitivePatchProjectPoints.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef PrimitivePatch_H
+#define PrimitivePatch_H
+
+#include "primitives/bools/lists/boolList.H"
+#include "primitives/ints/lists/labelList.H"
+#include "meshes/meshShapes/edge/edgeList.H"
+#include "meshes/primitiveShapes/point/point.H"
+#include "meshes/primitiveShapes/triangle/intersection.H"
+#include "containers/HashTables/HashSet/HashSet.H"
+#include "meshes/primitiveShapes/objectHit/objectHit.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+
+class face;
+template<class T> class Map;
+
+/*---------------------------------------------------------------------------*\
+                      Class PrimitivePatchName Declaration
+\*---------------------------------------------------------------------------*/
+
+TemplateName(PrimitivePatch);
+
+
+/*---------------------------------------------------------------------------*\
+                        Class PrimitivePatch Declaration
+\*---------------------------------------------------------------------------*/
+
+template<class FaceList, class PointField>
+class PrimitivePatch
+:
+    public PrimitivePatchName,
+    public FaceList
+{
+
+public:
+
+    // Public typedefs
+
+        typedef FaceList FaceListType;
+
+        typedef typename std::remove_reference<FaceList>::type::value_type
+            FaceType;
+
+        typedef PointField PointFieldType;
+
+        typedef typename std::remove_reference<PointField>::type::value_type
+            PointType;
+
+
+    // Public data types
+
+        //- Enumeration defining the surface type. Used in check routines.
+        enum surfaceTopo
+        {
+            MANIFOLD,
+            OPEN,
+            ILLEGAL
+        };
+
+private:
+
+    // Private data
+
+        //- Reference to global list of points
+        PointField points_;
+
+
+    // Demand driven private data
+
+        //- Edges of the patch; address into local point list;
+        //  sorted with internal edges first in upper-triangular order
+        //  and external edges last.
+        mutable edgeList* edgesPtr_;
+
+        //- Which part of edgesPtr_ is internal edges.
+        mutable label nInternalEdges_;
+
+        //- Boundary point labels, addressing into local point list
+        mutable labelList* boundaryPointsPtr_;
+
+        //- Face-face addressing
+        mutable labelListList* faceFacesPtr_;
+
+        //- Edge-face addressing
+        mutable labelListList* edgeFacesPtr_;
+
+        //- Face-edge addressing
+        mutable labelListList* faceEdgesPtr_;
+
+        //- Point-edge addressing
+        mutable labelListList* pointEdgesPtr_;
+
+        //- Point-face addressing
+        mutable labelListList* pointFacesPtr_;
+
+        //- Faces addressing into local point list
+        mutable List<FaceType>* localFacesPtr_;
+
+        //- Labels of mesh points
+        mutable labelList* meshPointsPtr_;
+
+        //- Mesh point map.  Given the global point index find its
+        // location in the patch
+        mutable Map<label>* meshPointMapPtr_;
+
+        //- Outside edge loops
+        mutable labelListList* edgeLoopsPtr_;
+
+        //- Points local to patch
+        mutable Field<PointType>* localPointsPtr_;
+
+        //- Local point order for most efficient search
+        mutable labelList* localPointOrderPtr_;
+
+        //- Face centres
+        mutable Field<PointType>* faceCentresPtr_;
+
+        //- Face area vectors
+        mutable Field<PointType>* faceAreasPtr_;
+
+        //- Face area magnitudes
+        mutable Field<scalar>* magFaceAreasPtr_;
+
+        //- Face unit normals
+        mutable Field<PointType>* faceNormalsPtr_;
+
+        //- Point unit normals
+        mutable Field<PointType>* pointNormalsPtr_;
+
+        //- Face curvature
+        mutable Field<scalar>* faceCurvaturePtr_;
+
+        //- Point curvature
+        mutable Field<scalar>* pointCurvaturePtr_;
+
+    // Private Member Functions
+
+        //- Calculate edges of the patch
+        void calcIntBdryEdges() const;
+
+        //- Calculated boundary points on a patch
+        void calcBdryPoints() const;
+
+        //- Calculate addressing
+        void calcAddressing() const;
+
+        //- Calculate point-edge addressing
+        void calcPointEdges() const;
+
+        //- Calculate point-face addressing
+        void calcPointFaces() const;
+
+        //- Calculate mesh addressing
+        void calcMeshData() const;
+
+        //- Calculate mesh point map
+        void calcMeshPointMap() const;
+
+        //- Calculate outside edge loops
+        void calcEdgeLoops() const;
+
+        //- Calculate local points
+        void calcLocalPoints() const;
+
+        //- Calculate local point order
+        void calcLocalPointOrder() const;
+
+        //- Calculate face centres
+        void calcFaceCentres() const;
+
+        //- Calculate face area vectors
+        void calcFaceAreas() const;
+
+        //- Calculate face area magnitudes
+        void calcMagFaceAreas() const;
+
+        //- Calculate unit face normals
+        void calcFaceNormals() const;
+
+        //- Calculate unit point normals
+        void calcPointNormals() const;
+
+        //- Calculate unit face normals
+        void correctZeroSizedFaceNormals() const;
+
+        //- Calculate face curvature
+        void calcFaceCurvature() const;
+
+        //- Calculate face curvature
+        void calcPointCurvature
+        (
+            const boolList&
+        ) const;
+
+        //- Face-edge-face walk while remaining on a patch point.
+        //  Used to determine if surface multiply connected through point.
+        void visitPointRegion
+        (
+            const label pointi,
+            const labelList& pFaces,
+            const label startFacei,
+            const label startEdgeI,
+            boolList& pFacesHad
+        ) const;
+
+
+public:
+
+    // Constructors
+
+        //- Construct from components
+        PrimitivePatch
+        (
+            const FaceList& faces,
+            const Field<PointType>& points
+        );
+
+        //- Construct from components
+        PrimitivePatch
+        (
+            const Xfer<FaceList>& faces,
+            const Xfer<List<PointType>>& points
+        );
+
+        //- Construct from components, reuse storage
+        PrimitivePatch
+        (
+            FaceList& faces,
+            Field<PointType>& points,
+            const bool reuse
+        );
+
+        //- Construct as copy
+        PrimitivePatch
+        (
+            const PrimitivePatch<FaceList, PointField>&
+        );
+
+        //- Construct and return a clone
+        autoPtr<PrimitivePatch<FaceList, PointField>> clone() const
+        {
+            return autoPtr<PrimitivePatch<FaceList, PointField>>
+            (
+                new PrimitivePatch<FaceList, PointField>(*this)
+            );
+        }
+
+
+    //- Destructor
+    ~PrimitivePatch();
+
+
+    // Member Functions
+
+        // Access
+
+            //- Return reference to global points
+            const Field<PointType>& points() const
+            {
+                return points_;
+            }
+
+
+        // Access functions for topological data; no mesh required.
+
+            //- Return number of points supporting patch faces
+            label nPoints() const
+            {
+                return meshPoints().size();
+            }
+
+            //- Return number of edges in patch
+            label nEdges() const
+            {
+                return edges().size();
+            }
+
+            //- Return list of edges, address into LOCAL point list
+            const edgeList& edges() const;
+
+            //- Number of internal edges
+            label nInternalEdges() const;
+
+            //- Is internal edge?
+            bool isInternalEdge(const label edgeI) const
+            {
+                return edgeI < nInternalEdges();
+            }
+
+            //- Return list of boundary points,
+            //  address into LOCAL point list
+            const labelList& boundaryPoints() const;
+
+            //- Return face-face addressing
+            const labelListList& faceFaces() const;
+
+            //- Return edge-face addressing
+            const labelListList& edgeFaces() const;
+
+            //- Return face-edge addressing
+            const labelListList& faceEdges() const;
+
+            //- Return point-edge addressing
+            const labelListList& pointEdges() const;
+
+            //- Return point-face addressing
+            const labelListList& pointFaces() const;
+
+            //- Return patch faces addressing into local point list
+            const List<FaceType>& localFaces() const;
+
+
+        // Addressing into mesh
+
+            //- Return labelList of mesh points in patch. They are constructed
+            //  walking through the faces in incremental order and not sorted
+            //  anymore.
+            const labelList& meshPoints() const;
+
+            //- Mesh point map.  Given the global point index find its
+            //  location in the patch
+            const Map<label>& meshPointMap() const;
+
+            //- Return pointField of points in patch
+            const Field<PointType>& localPoints() const;
+
+            //- Return orders the local points for most efficient search
+            const labelList& localPointOrder() const;
+
+            //- Given a global point index, return the local point index.
+            //  If the point is not found, return -1
+            label whichPoint(const label gp) const;
+
+            //- Given an edge in local point labels, return its
+            //  index in the edge list.  If the edge is not found, return -1
+            label whichEdge(const edge&) const;
+
+            //- Return labels of patch edges in the global edge list using
+            //  cell addressing
+            labelList meshEdges
+            (
+                const edgeList& allEdges,
+                const labelListList& cellEdges,
+                const labelList& faceCells
+            ) const;
+
+            //- Return labels of patch edges in the global edge list using
+            //  basic edge addressing.
+            labelList meshEdges
+            (
+                const edgeList& allEdges,
+                const labelListList& pointEdges
+            ) const;
+
+            //- Return face centres for patch
+            const Field<PointType>& faceCentres() const;
+
+            //- Return face area vectors for patch
+            const Field<PointType>& faceAreas() const;
+
+            //- Return face area magnitudes for patch
+            const Field<scalar>& magFaceAreas() const;
+
+            //- Return face unit normals for patch
+            const Field<PointType>& faceNormals() const;
+
+            //- Return point normals for patch
+            const Field<PointType>& pointNormals() const;
+
+            //- Return face curvature for patch
+            const Field<scalar>& faceCurvature() const;
+
+            //- Return face curvature for patch
+            const Field<scalar>& pointCurvature
+            (
+                const boolList&
+            ) const;
+
+
+        // Storage management
+
+            inline bool hasFaceAreas() const { return faceAreasPtr_; }
+            inline bool hasFaceCentres() const { return faceCentresPtr_; }
+            inline bool hasFaceNormals() const { return faceNormalsPtr_; }
+            inline bool hasPointNormals() const { return pointNormalsPtr_; }
+
+
+        // Other patch operations
+
+            //- Project vertices of patch onto another patch
+            template<class ToPatch>
+            List<objectHit> projectPoints
+            (
+                const ToPatch& targetPatch,
+                const Field<PointType>& projectionDirection,
+                const intersection::algorithm = intersection::FULL_RAY,
+                const intersection::direction = intersection::VECTOR
+            ) const;
+
+            //- Project vertices of patch onto another patch
+            template<class ToPatch>
+            List<objectHit> projectFaceCentres
+            (
+                const ToPatch& targetPatch,
+                const Field<PointType>& projectionDirection,
+                const intersection::algorithm = intersection::FULL_RAY,
+                const intersection::direction = intersection::VECTOR
+            ) const;
+
+            //- Return list of closed loops of boundary vertices.
+            //  Edge loops are given as ordered lists of vertices
+            //  in local addressing.
+            const labelListList& edgeLoops() const;
+
+
+        // Check
+
+            //- Calculate surface type formed by patch.
+            //  Types:
+            //  - all edges have two neighbours (manifold)
+            //  - some edges have more than two neighbours (illegal)
+            //  - other (open)
+            surfaceTopo surfaceType() const;
+
+            //- Check surface formed by patch for manifoldness (see above).
+            //  Return true if any incorrect edges are found.
+            //  Insert vertices of incorrect edges into set.
+            bool checkTopology
+            (
+                const bool report = false,
+                labelHashSet* setPtr = nullptr
+            ) const;
+
+            //- Check primitivePatch for faces sharing point but not edge.
+            //  This denotes a surface that is pinched at a single point
+            //  (test for pinched at single edge is already in PrimitivePatch)
+            //  Returns true if this situation found and puts conflicting
+            //  (mesh)point in set. Based on all the checking routines in
+            //  primitiveMesh.
+            bool checkPointManifold
+            (
+                const bool report = false,
+                labelHashSet* setPtr = nullptr
+            ) const;
+
+
+        // Edit
+
+            void clearOut();
+
+            void clearGeom();
+
+            void clearTopology();
+
+            void clearPatchMeshAddr();
+
+            void clearMeshPoints();
+
+
+    // Member operators
+
+        //- Assignment
+        void operator=(const PrimitivePatch<FaceList, PointField>&);
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#ifdef NoRepository
+    #include "meshes/primitiveMesh/PrimitivePatch/PrimitivePatch.C"
+#endif
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

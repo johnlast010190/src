@@ -1,0 +1,237 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2016 OpenFOAM Foundation
+    (c) 2016-2017 OpenCFD Ltd.
+
+Class
+    Foam::MeshedSurfaceProxy
+
+Description
+    A proxy for writing MeshedSurface, UnsortedMeshedSurface and surfMesh
+    to various file formats.
+
+SourceFiles
+    MeshedSurfaceProxy.C
+    MeshedSurfaceProxys.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef MeshedSurfaceProxy_H
+#define MeshedSurfaceProxy_H
+
+#include "meshes/primitiveShapes/point/pointField.H"
+#include "meshes/meshShapes/labelledTri/labelledTri.H"
+
+#include "surfZone/surfZone/surfZoneList.H"
+#include "surfaceFormats/surfaceFormatsCore.H"
+#include "db/runTimeSelection/construction/runTimeSelectionTables.H"
+#include "db/runTimeSelection/memberFunctions/memberFunctionSelectionTables.H"
+#include "containers/HashTables/HashSet/HashSet.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+
+// Forward declaration of friend functions and operators
+
+template<class Face> class MeshedSurface;
+
+/*---------------------------------------------------------------------------*\
+                     Class MeshedSurfaceProxy Declaration
+\*---------------------------------------------------------------------------*/
+
+
+extern const List<surfZone> theEmptySurfZoneList;
+extern const List<label> theEmptyLabelList;
+
+template<class Face>
+class MeshedSurfaceProxy
+:
+    public fileFormats::surfaceFormatsCore
+{
+    //- Private data
+
+        const pointField& points_;
+
+        const List<Face>& faces_;
+
+        const List<surfZone>& zones_;
+
+        const List<label>& faceMap_;
+
+
+public:
+
+    // Public typedefs
+
+        //- Face type used
+        typedef Face FaceType;
+
+
+    // Static
+
+        //- Runtime type information
+        ClassName("MeshedSurfaceProxy");
+
+        //- The file format types that can be written via MeshedSurfaceProxy
+        static wordHashSet writeTypes();
+
+        //- Can this file format type be written via MeshedSurfaceProxy?
+        static bool canWriteType(const word& ext, const bool verbose=false);
+
+
+    // Constructors
+
+        //- Construct from component references
+        MeshedSurfaceProxy
+        (
+            const pointField& pointLst,
+            const List<Face>& faceLst,
+            const List<surfZone>& zoneLst = theEmptySurfZoneList,
+            const List<label>& faceMap = theEmptyLabelList
+        );
+
+
+    //- Destructor
+    virtual ~MeshedSurfaceProxy();
+
+
+    // Member Function Selectors
+
+        declareMemberFunctionSelectionTable
+        (
+            void,
+            MeshedSurfaceProxy,
+            write,
+            fileExtension,
+            (
+                const fileName& name,
+                const MeshedSurfaceProxy<Face>& surf
+            ),
+            (name, surf)
+        );
+
+        //- Write to file, selected based on its extension
+        static void write
+        (
+            const fileName& name,
+            const MeshedSurfaceProxy& surf
+        );
+
+        //- Write to file, selected based on given extension
+        static void write
+        (
+            const fileName& name,
+            const word& ext,
+            const MeshedSurfaceProxy& surf
+        );
+
+
+    // Member Functions
+
+        // Access
+
+            //- The surface size is the number of faces
+            inline label size() const
+            {
+                return faces_.size();
+            }
+
+            //- Return const access to the points
+            inline const pointField& points() const
+            {
+                return points_;
+            }
+
+            //- Return const access to the faces
+            inline const List<Face>& surfFaces() const
+            {
+                return faces_;
+            }
+
+            //- Const access to the surface zones.
+            //  If zones are defined, they must be contiguous and cover the
+            //  entire surface
+            inline const List<surfZone>& surfZones() const
+            {
+                return zones_;
+            }
+
+            //- Const access to the faceMap, zero-sized when unused
+            inline const List<label>& faceMap() const
+            {
+                return faceMap_;
+            }
+
+            //- Use faceMap?
+            inline bool useFaceMap() const
+            {
+                return faceMap_.size() == faces_.size();
+            }
+
+            //- Count number of triangles.
+            inline label nTriangles() const;
+
+
+        // Write
+
+            //- Generic write routine. Chooses writer based on extension.
+            virtual void write(const fileName& name) const
+            {
+                write(name, *this);
+            }
+
+            //- Generic write routine. Chooses writer based on extension.
+            virtual void write(const fileName& name, const word& ext) const
+            {
+                write(name, ext, *this);
+            }
+
+            //- Write to database
+            virtual void write
+            (
+                const Time& t,
+                const word& surfName = word::null
+            ) const;
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#ifdef NoRepository
+    #include "MeshedSurfaceProxy/MeshedSurfaceProxy.C"
+#endif
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

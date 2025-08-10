@@ -1,0 +1,48 @@
+FoamFile
+{
+    version 2.0;
+    format ascii;
+    class dictionary;
+    object domainFFTDict;
+}
+// *********************************************************************** //
+
+blockSize 1000000;
+
+binary true;
+
+compressible false;
+
+fLower 10;
+fUpper 5000;
+
+startTime 0;
+
+hanning on;
+
+calaculateOneThirdOctaveFFT on;
+
+calculateEveryFrequency on;
+
+calculateReverseFFT on;
+
+filterBands ((20 1000)(1000 4000));
+
+timeRatio 1;
+
+hanningCoeff 1.0;
+
+numberOfTimeSteps 500;
+
+inputTimesRatio 1;
+
+reverseFFTRatio 1;
+
+internal on;
+
+pName pBound;
+
+patches (lowerWall);
+
+// *********************************************************************** //
+

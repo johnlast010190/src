@@ -1,0 +1,1488 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2016 OpenFOAM Foundation
+    (c) 2016 OpenCFD Ltd.
+    (c) 2010-2024 Esi Ltd.
+
+\*---------------------------------------------------------------------------*/
+
+#include "fields/volFields/volFields.H"
+#include "fields/surfaceFields/surfaceFields.H"
+#include "fields/fvPatchFields/basic/calculated/calculatedFvPatchFields.H"
+#include "fields/fvPatchFields/basic/extrapolatedCalculated/extrapolatedCalculatedFvPatchFields.H"
+#include "fields/fvPatchFields/basic/coupled/coupledFvPatchFields.H"
+#include "containers/Lists/UIndirectList/UIndirectList.H"
+#include "finiteVolume/fvc/fvcSurfaceIntegrate.H"
+#include "containers/Lists/CompactListList/CompactListList.H"
+#include "interpolation/surfaceInterpolation/surfaceInterpolation/surfaceInterpolate.H"
+
+// * * * * * * * * * * * * Protected Member Functions  * * * * * * * * * * * //
+
+template<class Type>
+template<class Type2>
+void Foam::fvMatrix<Type>::addToInternalField
+(
+    const labelUList& addr,
+    const Field<Type2>& pf,
+    Field<Type2>& intf
+) const
+{
+    if (addr.size() != pf.size())
+    {
+        FatalErrorInFunction
+            << "sizes of addressing and field are different"
+            << abort(FatalError);
+    }
+
+    forAll(addr, facei)
+    {
+        intf[addr[facei]] += pf[facei];
+    }
+}
+
+
+template<class Type>
+template<class Type2>
+void Foam::fvMatrix<Type>::addToInternalField
+(
+    const labelUList& addr,
+    const tmp<Field<Type2>>& tpf,
+    Field<Type2>& intf
+) const
+{
+    addToInternalField(addr, tpf(), intf);
+    tpf.clear();
+}
+
+
+template<class Type>
+template<class Type2>
+void Foam::fvMatrix<Type>::subtractFromInternalField
+(
+    const labelUList& addr,
+    const Field<Type2>& pf,
+    Field<Type2>& intf
+) const
+{
+    if (addr.size() != pf.size())
+    {
+        FatalErrorInFunction
+            << "sizes of addressing and field are different"
+            << abort(FatalError);
+    }
+
+    forAll(addr, facei)
+    {
+        intf[addr[facei]] -= pf[facei];
+    }
+}
+
+
+template<class Type>
+template<class Type2>
+void Foam::fvMatrix<Type>::subtractFromInternalField
+(
+    const labelUList& addr,
+    const tmp<Field<Type2>>& tpf,
+    Field<Type2>& intf
+) const
+{
+    subtractFromInternalField(addr, tpf(), intf);
+    tpf.clear();
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::addBoundaryDiag
+(
+    scalarField& diag,
+    const direction solveCmpt
+) const
+{
+    forAll(internalCoeffs_, patchi)
+    {
+        addToInternalField
+        (
+            lduAddr().patchAddr(patchi),
+            internalCoeffs_[patchi].component(solveCmpt),
+            diag
+        );
+    }
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::addCmptAvBoundaryDiag(scalarField& diag) const
+{
+    forAll(internalCoeffs_, patchi)
+    {
+        addToInternalField
+        (
+            lduAddr().patchAddr(patchi),
+            cmptAv(internalCoeffs_[patchi]),
+            diag
+        );
+    }
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::addBoundarySource
+(
+    Field<Type>& source,
+    const GeometricField<Type, fvPatchField, volMesh>& psi,
+    const bool couples
+) const
+{
+    forAll(psi.boundaryField(), patchi)
+    {
+        const fvPatchField<Type>& ptf = psi.boundaryField()[patchi];
+        const Field<Type>& pbc = boundaryCoeffs_[patchi];
+
+        if (!ptf.coupled())
+        {
+            if (ptf.regionCoupled())
+            {
+                addToInternalField
+                (
+                    lduAddr().patchAddr(patchi), cmptMultiply(pbc, ptf), source
+                );
+            }
+            else
+            {
+                addToInternalField(lduAddr().patchAddr(patchi), pbc, source);
+            }
+        }
+        else if (couples)
+        {
+            const tmp<Field<Type>> tpnf = ptf.patchNeighbourField();
+            const Field<Type>& pnf = tpnf();
+
+            const labelUList& addr = lduAddr().patchAddr(patchi);
+
+            forAll(addr, facei)
+            {
+                source[addr[facei]] += cmptMultiply(pbc[facei], pnf[facei]);
+            }
+        }
+    }
+}
+
+
+template<class Type>
+Foam::List<bool> Foam::fvMatrix<Type>::markGIBFaces() const
+{
+    const fvMesh& mesh = psi_.mesh();
+
+    boolList gibFaces(mesh.faces().size(), false);
+    forAll(mesh.boundary(), patchi)
+    {
+        if (isA<indirectPolyPatch>(mesh.boundary()[patchi].patch()))
+        {
+            const indirectPolyPatch& dpp =
+                refCast<const indirectPolyPatch>
+                (
+                    mesh.boundary()[patchi].patch()
+                );
+
+            if (dpp.indirectPolyPatchType() == "master")
+            {
+                const faceZone& zfl = mesh.faceZones()[dpp.zoneId()];
+                forAll(zfl, facei)
+                {
+                    gibFaces[zfl[facei]] = true;
+                }
+            }
+        }
+    }
+
+    return gibFaces;
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::setValue
+(
+    const label celli,
+    const Type& value,
+    const boolList& gibFaces
+)
+{
+    const fvMesh& mesh = psi_.mesh();
+
+    const cellList& cells = mesh.cells();
+    const labelUList& own = mesh.owner();
+    const labelUList& nei = mesh.neighbour();
+
+    scalarField& Diag = diag();
+
+    Field<Type>& psi =
+        const_cast<GeometricField<Type, fvPatchField, volMesh>&>(psi_)
+       .primitiveFieldRef();
+
+    psi[celli] = value;
+    source_[celli] = value*Diag[celli];
+
+    if (symmetric() || asymmetric())
+    {
+        label nBound = 0;
+
+        const cell& c = cells[celli];
+
+        forAll(c, j)
+        {
+            const label facei = c[j];
+
+            if (mesh.isInternalFace(facei))
+            {
+                if (symmetric())
+                {
+                    if (celli == own[facei])
+                    {
+                        source_[nei[facei]] -= upper()[facei]*value;
+                    }
+                    else
+                    {
+                        source_[own[facei]] -= upper()[facei]*value;
+                    }
+
+                    upper()[facei] = 0.0;
+                }
+                else
+                {
+                    if (celli == own[facei])
+                    {
+                        source_[nei[facei]] -= lower()[facei]*value;
+                    }
+                    else
+                    {
+                        source_[own[facei]] -= upper()[facei]*value;
+                    }
+
+                    upper()[facei] = 0.0;
+                    lower()[facei] = 0.0;
+                }
+
+                if (gibFaces[facei] == true)
+                {
+                    nBound++;
+                }
+            }
+            else
+            {
+                const label patchi = mesh.boundaryMesh().whichPatch(facei);
+
+                if
+                (
+                    !isA<indirectPolyPatch>(mesh.boundary()[patchi].patch())
+                )
+                {
+                    const label bFacei = facei - mesh.nInternalFaces();
+
+                    const labelUList patches =
+                        mesh.polyBFacePatches()[bFacei];
+                    const labelUList patchFaces =
+                        mesh.polyBFacePatchFaces()[bFacei];
+
+                    forAll(patches, i)
+                    {
+                        internalCoeffs_[patches[i]][patchFaces[i]] = Zero;
+                        boundaryCoeffs_[patches[i]][patchFaces[i]] = Zero;
+                    }
+                }
+                else
+                {
+                    if (internalCoeffs_[patchi].size())
+                    {
+                        label patchFacei =
+                            mesh.boundaryMesh()[patchi].whichFace(facei);
+
+                        internalCoeffs_[patchi][patchFacei] = Zero;
+                        boundaryCoeffs_[patchi][patchFacei] = Zero;
+                    }
+                }
+
+                nBound++;
+            }
+        }
+
+        // Reset source and diagonal if all cell faces are boundary faces
+        if (nBound == c.size())
+        {
+            Diag[celli] = 1.0;
+            source_[celli] = value*Diag[celli];
+        }
+    }
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::setValue
+(
+    const label celli,
+    const Type& value,
+    const scalar fraction,
+    const scalarField& ddtDiag
+)
+{
+    Field<Type>& psi =
+        const_cast<GeometricField<Type, fvPatchField, volMesh>&>(psi_)
+       .primitiveFieldRef();
+
+    psi[celli] = (1 - fraction)*psi[celli] + fraction*value;
+
+    const scalar coeff =
+        fraction/(1 - fraction)
+       *(diag()[celli] - ddtDiag[celli]);
+
+    diag()[celli] += coeff;
+    source()[celli] += coeff*value;
+}
+
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+template<class Type>
+Foam::fvMatrix<Type>::fvMatrix
+(
+    const GeometricField<Type, fvPatchField, volMesh>& psi,
+    const dimensionSet& ds
+)
+:
+    lduMatrix(psi.mesh()),
+    psi_(psi),
+    dimensions_(ds),
+    source_(psi.size(), Zero),
+    internalCoeffs_(psi.mesh().boundary().size()),
+    boundaryCoeffs_(psi.mesh().boundary().size()),
+    faceFluxCorrectionPtr_(nullptr)
+{
+    if (debug)
+    {
+        InfoInFunction
+            << "Constructing fvMatrix<Type> for field " << psi_.name() << endl;
+    }
+
+    // Initialise coupling coefficients
+    forAll(psi.mesh().boundary(), patchi)
+    {
+        internalCoeffs_.set
+        (
+            patchi,
+            new Field<Type>
+            (
+                psi.mesh().boundary()[patchi].size(),
+                Zero
+            )
+        );
+
+        boundaryCoeffs_.set
+        (
+            patchi,
+            new Field<Type>
+            (
+                psi.mesh().boundary()[patchi].size(),
+                Zero
+            )
+        );
+    }
+
+    // Update the boundary coefficients of psi without changing its event No.
+    GeometricField<Type, fvPatchField, volMesh>& psiRef =
+       const_cast<GeometricField<Type, fvPatchField, volMesh>&>(psi_);
+
+    psiRef.updateBoundaryCoeffs();
+}
+
+
+template<class Type>
+Foam::fvMatrix<Type>::fvMatrix(const fvMatrix<Type>& fvm)
+:
+    tmp<fvMatrix<Type>>::refCount(),
+    lduMatrix(fvm),
+    psi_(fvm.psi_),
+    dimensions_(fvm.dimensions_),
+    source_(fvm.source_),
+    internalCoeffs_(fvm.internalCoeffs_),
+    boundaryCoeffs_(fvm.boundaryCoeffs_),
+    faceFluxCorrectionPtr_(nullptr)
+{
+    if (debug)
+    {
+        InfoInFunction
+            << "Copying fvMatrix<Type> for field " << psi_.name() << endl;
+    }
+
+    if (fvm.faceFluxCorrectionPtr_)
+    {
+        faceFluxCorrectionPtr_ = new
+        GeometricField<Type, fvsPatchField, surfaceMesh>
+        (
+            *(fvm.faceFluxCorrectionPtr_)
+        );
+    }
+}
+
+
+#ifndef NoConstructFromTmp
+template<class Type>
+Foam::fvMatrix<Type>::fvMatrix
+(
+    const GeometricField<Type, fvPatchField, volMesh>& psi,
+    const tmp<fvMatrix<Type>>& tfvm
+)
+:
+    lduMatrix
+    (
+        const_cast<fvMatrix<Type>&>(tfvm()),
+        tfvm.isTmp()
+    ),
+    psi_(psi),
+    dimensions_(tfvm().dimensions_),
+    source_
+    (
+        const_cast<fvMatrix<Type>&>(tfvm()).source_,
+        tfvm.isTmp()
+    ),
+    internalCoeffs_
+    (
+        const_cast<fvMatrix<Type>&>(tfvm()).internalCoeffs_,
+        tfvm.isTmp()
+    ),
+    boundaryCoeffs_
+    (
+        const_cast<fvMatrix<Type>&>(tfvm()).boundaryCoeffs_,
+        tfvm.isTmp()
+    ),
+    faceFluxCorrectionPtr_(nullptr)
+{
+    if (debug)
+    {
+        InfoInFunction
+            << "Copying fvMatrix<Type> for field " << psi_.name() << endl;
+    }
+
+    if (tfvm().faceFluxCorrectionPtr_)
+    {
+        if (tfvm.isTmp())
+        {
+            faceFluxCorrectionPtr_ = tfvm().faceFluxCorrectionPtr_;
+            tfvm().faceFluxCorrectionPtr_ = nullptr;
+        }
+        else
+        {
+            faceFluxCorrectionPtr_ = new
+                GeometricField<Type, fvsPatchField, surfaceMesh>
+                (
+                    *(tfvm().faceFluxCorrectionPtr_)
+                );
+        }
+    }
+
+    tfvm.clear();
+}
+
+
+template<class Type>
+Foam::fvMatrix<Type>::fvMatrix(const tmp<fvMatrix<Type>>& tfvm)
+:
+    fvMatrix(tfvm().psi_, tfvm)
+{}
+#endif
+
+
+template<class Type>
+Foam::fvMatrix<Type>::fvMatrix
+(
+    const GeometricField<Type, fvPatchField, volMesh>& psi,
+    Istream& is
+)
+:
+    lduMatrix(psi.mesh()),
+    psi_(psi),
+    dimensions_(is),
+    source_(is),
+    internalCoeffs_(psi.mesh().boundary().size()),
+    boundaryCoeffs_(psi.mesh().boundary().size()),
+    faceFluxCorrectionPtr_(nullptr)
+{
+    if (debug)
+    {
+        InfoInFunction
+            << "Constructing fvMatrix<Type> for field " << psi_.name() << endl;
+    }
+
+    // Initialise coupling coefficients
+    forAll(psi.mesh().boundary(), patchi)
+    {
+        internalCoeffs_.set
+        (
+            patchi,
+            new Field<Type>
+            (
+                psi.mesh().boundary()[patchi].size(),
+                Zero
+            )
+        );
+
+        boundaryCoeffs_.set
+        (
+            patchi,
+            new Field<Type>
+            (
+                psi.mesh().boundary()[patchi].size(),
+                Zero
+            )
+        );
+    }
+
+}
+
+
+template<class Type>
+Foam::fvMatrix<Type>::~fvMatrix()
+{
+    if (debug)
+    {
+        InfoInFunction
+            << "Destroying fvMatrix<Type> for field " << psi_.name() << endl;
+    }
+
+    if (faceFluxCorrectionPtr_)
+    {
+        delete faceFluxCorrectionPtr_;
+    }
+}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+// turn off solution of given cells, retaining current value
+// and eliminating corresponding equation from the matrix
+template<class Type>
+void Foam::fvMatrix<Type>::fixValues
+(
+    const labelList& cellLabels
+)
+{
+    const fvMesh& mesh = psi_.mesh();
+
+    const cellList& cells = mesh.cells();
+    const labelUList& own = mesh.owner();
+    const labelUList& nei = mesh.neighbour();
+
+    scalarField& Diag = diag();
+
+    forAll(cellLabels, i)
+    {
+        label celli = cellLabels[i];
+
+        source_[celli] = psi_[celli]*Diag[celli];
+
+        if (symmetric() || asymmetric())
+        {
+            const cell& c = cells[celli];
+
+            forAll(c, j)
+            {
+                label facei = c[j];
+
+                if (mesh.isInternalFace(facei))
+                {
+                    if (symmetric())
+                    {
+                        if (celli == own[facei])
+                        {
+                            source_[nei[facei]] -= upper()[facei]*psi_[celli];
+                        }
+                        else
+                        {
+                            source_[own[facei]] -= upper()[facei]*psi_[celli];
+                        }
+
+                        upper()[facei] = 0.0;
+                    }
+                    else
+                    {
+                        if (celli == own[facei])
+                        {
+                            source_[nei[facei]] -= lower()[facei]*psi_[celli];
+                        }
+                        else
+                        {
+                            source_[own[facei]] -= upper()[facei]*psi_[celli];
+                        }
+
+                        upper()[facei] = 0.0;
+                        lower()[facei] = 0.0;
+                    }
+                }
+                else
+                {
+                    label patchi = mesh.boundaryMesh().whichPatch(facei);
+
+                    if (internalCoeffs_[patchi].size())
+                    {
+                        label patchFacei =
+                            mesh.boundaryMesh()[patchi].whichFace(facei);
+
+                        internalCoeffs_[patchi][patchFacei] =
+                            pTraits<Type>::zero;
+
+                        boundaryCoeffs_[patchi][patchFacei] =
+                            pTraits<Type>::zero;
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::setReference
+(
+    const label celli,
+    const Type& value,
+    const bool forceReference
+)
+{
+    if ((forceReference || psi_.needReference()) && celli >= 0)
+    {
+        source()[celli] += diag()[celli]*value;
+        diag()[celli] += diag()[celli];
+    }
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::setReferences
+(
+    const labelList& cellLabels,
+    const UList<Type>& values,
+    const bool forceReference
+)
+{
+    bool needRef = (forceReference || psi_.needReference());
+
+    if (needRef)
+    {
+        forAll(cellLabels, celli)
+        {
+            label cellId = cellLabels[celli];
+            if (celli >= 0)
+            {
+                source()[cellId] += diag()[cellId]*values[celli];
+                diag()[cellId] += diag()[cellId];
+            }
+        }
+    }
+}
+
+
+template<class Type>
+Foam::scalar Foam::fvMatrix<Type>::relaxationFactor() const
+{
+    word name = psi_.select
+    (
+        psi_.mesh().data::template lookupOrDefault<bool>
+        ("finalIteration", false)
+    );
+
+    if (psi_.mesh().solution().relaxEquation(name))
+    {
+        return psi_.mesh().solution().equationRelaxationFactor(name);
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::relax(const scalar alpha)
+{
+    if (alpha <= 0)
+    {
+        return;
+    }
+
+    if (debug)
+    {
+        InfoInFunction
+            << "Relaxing " << psi_.name() << " by " << alpha << endl;
+    }
+
+    Field<Type>& S = source();
+    scalarField& D = diag();
+
+    // Store the current unrelaxed diagonal for use in updating the source
+    scalarField D0(D);
+
+    // Calculate the sum-mag off-diagonal from the interior faces
+    scalarField sumOff(D.size(), 0.0);
+    sumMagOffDiag(sumOff);
+
+    // Handle the boundary contributions to the diagonal
+    forAll(psi_.boundaryField(), patchi)
+    {
+        const fvPatchField<Type>& ptf = psi_.boundaryField()[patchi];
+
+        if (ptf.size())
+        {
+            const labelUList& pa = lduAddr().patchAddr(patchi);
+            Field<Type>& iCoeffs = internalCoeffs_[patchi];
+
+            if (ptf.coupled())
+            {
+                const Field<Type>& pCoeffs = boundaryCoeffs_[patchi];
+
+                // For coupled boundaries add the diagonal and
+                // off-diagonal contributions
+                forAll(pa, face)
+                {
+                    D[pa[face]] += component(iCoeffs[face], 0);
+                    sumOff[pa[face]] += mag(component(pCoeffs[face], 0));
+                }
+            }
+            else
+            {
+                // For non-coupled boundaries add the maximum magnitude diagonal
+                // contribution to ensure stability
+                forAll(pa, face)
+                {
+                    D[pa[face]] += cmptMax(cmptMag(iCoeffs[face]));
+                }
+            }
+        }
+    }
+
+
+    if (debug)
+    {
+        // Calculate amount of non-dominance.
+        label nNon = 0;
+        scalar maxNon = 0.0;
+        scalar sumNon = 0.0;
+        forAll(D, celli)
+        {
+            scalar d = (sumOff[celli] - D[celli])/mag(D[celli]);
+
+            if (d > 0)
+            {
+                nNon++;
+                maxNon = max(maxNon, d);
+                sumNon += d;
+            }
+        }
+
+        label totalDSize = D.size();
+        reduce(
+            std::tie(nNon, maxNon, sumNon, totalDSize),
+            ParallelOp<sumOp<label>, maxOp<scalar>, sumOp<scalar>, sumOp<label>>{},
+            psi_.mesh().comm()
+        );
+        sumNon /= totalDSize;
+
+        InfoInFunction
+            << "Matrix dominance test for " << psi_.name() << nl
+            << "    number of non-dominant cells   : " << nNon << nl
+            << "    maximum relative non-dominance : " << maxNon << nl
+            << "    average relative non-dominance : " << sumNon << nl
+            << endl;
+    }
+
+
+    // Ensure the matrix is diagonally dominant...
+    // Assumes that the central coefficient is positive and ensures it is
+    forAll(D, celli)
+    {
+        D[celli] = max(mag(D[celli]), sumOff[celli]);
+    }
+
+    // ... then relax
+    D /= alpha;
+
+    // Now remove the diagonal contribution from coupled boundaries
+    forAll(psi_.boundaryField(), patchi)
+    {
+        const fvPatchField<Type>& ptf = psi_.boundaryField()[patchi];
+
+        if (ptf.size())
+        {
+            const labelUList& pa = lduAddr().patchAddr(patchi);
+            Field<Type>& iCoeffs = internalCoeffs_[patchi];
+
+            if (ptf.coupled())
+            {
+                forAll(pa, face)
+                {
+                    D[pa[face]] -= component(iCoeffs[face], 0);
+                }
+            }
+            else
+            {
+                forAll(pa, face)
+                {
+                    D[pa[face]] -= cmptMin(iCoeffs[face]);
+                }
+            }
+        }
+    }
+
+    // Finally add the relaxation contribution to the source.
+    S += (D - D0)*psi_.primitiveField();
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::relax()
+{
+    relax(relaxationFactor());
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::relax(word name)
+{
+    if (psi_.mesh().solution().relaxEquation(name))
+    {
+        relax(psi_.mesh().solution().equationRelaxationFactor(name));
+    }
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::boundaryManipulate
+(
+    typename GeometricField<Type, fvPatchField, volMesh>::
+        Boundary& bFields
+)
+{
+    forAll(bFields, patchi)
+    {
+        bFields[patchi].manipulateMatrix(*this);
+    }
+}
+
+
+template<class Type>
+Foam::tmp<Foam::scalarField> Foam::fvMatrix<Type>::D() const
+{
+    tmp<scalarField> tdiag(new scalarField(diag()));
+    addCmptAvBoundaryDiag(tdiag.ref());
+    return tdiag;
+}
+
+
+template<class Type>
+Foam::tmp<Foam::Field<Type>> Foam::fvMatrix<Type>::DD() const
+{
+    tmp<Field<Type>> tdiag(pTraits<Type>::one*diag());
+
+    forAll(psi_.boundaryField(), patchi)
+    {
+        const fvPatchField<Type>& ptf = psi_.boundaryField()[patchi];
+
+        if (!ptf.coupled() && ptf.size())
+        {
+            addToInternalField
+            (
+                lduAddr().patchAddr(patchi),
+                internalCoeffs_[patchi],
+                tdiag.ref()
+            );
+        }
+    }
+
+    return tdiag;
+}
+
+
+template<class Type>
+Foam::tmp<Foam::volScalarField> Foam::fvMatrix<Type>::A() const
+{
+    tmp<volScalarField> tAphi
+    (
+        new volScalarField
+        (
+            IOobject
+            (
+                "A("+psi_.name()+')',
+                psi_.instance(),
+                psi_.mesh(),
+                IOobject::NO_READ,
+                IOobject::NO_WRITE
+            ),
+            psi_.mesh(),
+            dimensions_/psi_.dimensions()/dimVol,
+            extrapolatedCalculatedFvPatchScalarField::typeName,
+            psi().boundaryField().patchTypes()
+        )
+    );
+
+    tAphi.ref().primitiveFieldRef() = D()/psi_.mesh().V();
+    tAphi.ref().correctBoundaryConditions();
+
+    return tAphi;
+}
+
+
+template<class Type>
+Foam::tmp<Foam::GeometricField<Type, Foam::fvPatchField, Foam::volMesh>>
+Foam::fvMatrix<Type>::H() const
+{
+    tmp<GeometricField<Type, fvPatchField, volMesh>> tHphi
+    (
+        new GeometricField<Type, fvPatchField, volMesh>
+        (
+            IOobject
+            (
+                "H("+psi_.name()+')',
+                psi_.instance(),
+                psi_.mesh(),
+                IOobject::NO_READ,
+                IOobject::NO_WRITE
+            ),
+            psi_.mesh(),
+            dimensions_/dimVol,
+            extrapolatedCalculatedFvPatchScalarField::typeName,
+            psi().boundaryField().patchTypes()
+        )
+    );
+    GeometricField<Type, fvPatchField, volMesh>& Hphi = tHphi.ref();
+
+    // Loop over field components
+    for (direction cmpt=0; cmpt<Type::nComponents; cmpt++)
+    {
+        scalarField psiCmpt(psi_.primitiveField().component(cmpt));
+
+        scalarField boundaryDiagCmpt(psi_.size(), 0.0);
+        addBoundaryDiag(boundaryDiagCmpt, cmpt);
+        boundaryDiagCmpt.negate();
+        addCmptAvBoundaryDiag(boundaryDiagCmpt);
+
+        Hphi.primitiveFieldRef().replace(cmpt, boundaryDiagCmpt*psiCmpt);
+    }
+
+    Hphi.primitiveFieldRef() += lduMatrix::H(psi_.primitiveField()) + source_;
+    addBoundarySource(Hphi.primitiveFieldRef(), psi_);
+
+    Hphi.primitiveFieldRef() /= psi_.mesh().V();
+    Hphi.correctBoundaryConditions();
+
+    typename Type::labelType validComponents
+    (
+        psi_.mesh().template validComponents<Type>()
+    );
+
+    for (direction cmpt=0; cmpt<Type::nComponents; cmpt++)
+    {
+        if (validComponents[cmpt] == -1)
+        {
+            Hphi.replace
+            (
+                cmpt,
+                dimensionedScalar("0", Hphi.dimensions(), 0.0)
+            );
+        }
+    }
+
+    return tHphi;
+}
+
+
+template<class Type>
+Foam::tmp<Foam::volScalarField> Foam::fvMatrix<Type>::H1() const
+{
+    tmp<volScalarField> tH1
+    (
+        new volScalarField
+        (
+            IOobject
+            (
+                "H(1)",
+                psi_.instance(),
+                psi_.mesh(),
+                IOobject::NO_READ,
+                IOobject::NO_WRITE
+            ),
+            psi_.mesh(),
+            dimensions_/(dimVol*psi_.dimensions()),
+            extrapolatedCalculatedFvPatchScalarField::typeName
+        )
+    );
+    volScalarField& H1_ = tH1.ref();
+
+    H1_.primitiveFieldRef() = lduMatrix::H1();
+
+    forAll(psi_.boundaryField(), patchi)
+    {
+        const fvPatchField<Type>& ptf = psi_.boundaryField()[patchi];
+
+        if (ptf.coupled() && ptf.size())
+        {
+            addToInternalField
+            (
+                lduAddr().patchAddr(patchi),
+                boundaryCoeffs_[patchi].component(0),
+                H1_
+            );
+        }
+    }
+
+    H1_.primitiveFieldRef() /= psi_.mesh().V();
+    H1_.correctBoundaryConditions();
+
+    return tH1;
+}
+
+
+template<class Type>
+Foam::tmp<Foam::GeometricField<Type, Foam::fvsPatchField, Foam::surfaceMesh>>
+Foam::fvMatrix<Type>::
+flux() const
+{
+    if (!psi_.mesh().schemes().fluxRequired(psi_.name()))
+    {
+        FatalErrorInFunction
+            << "flux requested but " << psi_.name()
+            << " not specified in the fluxRequired sub-dictionary"
+               " of fvSchemes."
+            << abort(FatalError);
+    }
+
+    // construct GeometricField<Type, fvsPatchField, surfaceMesh>
+    tmp<GeometricField<Type, fvsPatchField, surfaceMesh>> tfieldFlux
+    (
+        new GeometricField<Type, fvsPatchField, surfaceMesh>
+        (
+            IOobject
+            (
+                "flux("+psi_.name()+')',
+                psi_.instance(),
+                psi_.mesh(),
+                IOobject::NO_READ,
+                IOobject::NO_WRITE
+            ),
+            psi_.mesh(),
+            dimensions()
+        )
+    );
+    GeometricField<Type, fvsPatchField, surfaceMesh>& fieldFlux =
+        tfieldFlux.ref();
+
+    fieldFlux.setOriented();
+
+    for (direction cmpt=0; cmpt<pTraits<Type>::nComponents; cmpt++)
+    {
+        fieldFlux.primitiveFieldRef().replace
+        (
+            cmpt,
+            lduMatrix::faceH(psi_.primitiveField().component(cmpt))
+        );
+    }
+
+    FieldField<Field, Type> InternalContrib = internalCoeffs_;
+
+    forAll(InternalContrib, patchi)
+    {
+        InternalContrib[patchi] =
+            cmptMultiply
+            (
+                InternalContrib[patchi],
+                psi_.boundaryField()[patchi].patchInternalField()
+            );
+    }
+
+    FieldField<Field, Type> NeighbourContrib = boundaryCoeffs_;
+
+    forAll(NeighbourContrib, patchi)
+    {
+        const fvPatchField<Type>& pf = psi_.boundaryField()[patchi];
+        if (pf.coupled())
+        {
+            NeighbourContrib[patchi] =
+                cmptMultiply
+                (
+                    NeighbourContrib[patchi],
+                    pf.patchNeighbourField()
+                );
+        }
+        else if (pf.regionCoupled())
+        {
+            NeighbourContrib[patchi] =
+                cmptMultiply
+                (
+                    NeighbourContrib[patchi],
+                    pf
+                );
+        }
+    }
+
+    typename GeometricField<Type, fvsPatchField, surfaceMesh>::
+        Boundary& ffbf = fieldFlux.boundaryFieldRef();
+
+    forAll(ffbf, patchi)
+    {
+        ffbf[patchi] = InternalContrib[patchi] - NeighbourContrib[patchi];
+    }
+
+    if (faceFluxCorrectionPtr_)
+    {
+        fieldFlux += *faceFluxCorrectionPtr_;
+    }
+
+    return tfieldFlux;
+}
+
+
+template<class Type>
+const Foam::dictionary& Foam::fvMatrix<Type>::solverDict() const
+{
+    return psi_.mesh().solution().solverDict
+    (
+        psi_.select
+        (
+            psi_.mesh().data::template lookupOrDefault<bool>
+            ("finalIteration", false)
+        )
+    );
+}
+
+
+// * * * * * * * * * * * * * * * Member Operators  * * * * * * * * * * * * * //
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator=(const fvMatrix<Type>& fvmv)
+{
+    if (this == &fvmv)
+    {
+        FatalErrorInFunction
+            << "attempted assignment to self"
+            << abort(FatalError);
+    }
+
+    if (&psi_ != &(fvmv.psi_))
+    {
+        FatalErrorInFunction
+            << "different fields"
+            << abort(FatalError);
+    }
+
+    dimensions_ = fvmv.dimensions_;
+    lduMatrix::operator=(fvmv);
+    source_ = fvmv.source_;
+    internalCoeffs_ = fvmv.internalCoeffs_;
+    boundaryCoeffs_ = fvmv.boundaryCoeffs_;
+
+    if (faceFluxCorrectionPtr_ && fvmv.faceFluxCorrectionPtr_)
+    {
+        *faceFluxCorrectionPtr_ = *fvmv.faceFluxCorrectionPtr_;
+    }
+    else if (fvmv.faceFluxCorrectionPtr_)
+    {
+        faceFluxCorrectionPtr_ =
+            new GeometricField<Type, fvsPatchField, surfaceMesh>
+        (*fvmv.faceFluxCorrectionPtr_);
+    }
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator=(const tmp<fvMatrix<Type>>& tfvmv)
+{
+    operator=(tfvmv());
+    tfvmv.clear();
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::negate()
+{
+    lduMatrix::negate();
+    source_.negate();
+    internalCoeffs_.negate();
+    boundaryCoeffs_.negate();
+
+    if (faceFluxCorrectionPtr_)
+    {
+        faceFluxCorrectionPtr_->negate();
+    }
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator+=(const fvMatrix<Type>& fvmv)
+{
+    checkMethod(*this, fvmv, "+=");
+
+    dimensions_ += fvmv.dimensions_;
+    lduMatrix::operator+=(fvmv);
+    source_ += fvmv.source_;
+    internalCoeffs_ += fvmv.internalCoeffs_;
+    boundaryCoeffs_ += fvmv.boundaryCoeffs_;
+
+    if (faceFluxCorrectionPtr_ && fvmv.faceFluxCorrectionPtr_)
+    {
+        *faceFluxCorrectionPtr_ += *fvmv.faceFluxCorrectionPtr_;
+    }
+    else if (fvmv.faceFluxCorrectionPtr_)
+    {
+        faceFluxCorrectionPtr_ = new
+        GeometricField<Type, fvsPatchField, surfaceMesh>
+        (
+            *fvmv.faceFluxCorrectionPtr_
+        );
+    }
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator+=(const tmp<fvMatrix<Type>>& tfvmv)
+{
+    operator+=(tfvmv());
+    tfvmv.clear();
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator-=(const fvMatrix<Type>& fvmv)
+{
+    checkMethod(*this, fvmv, "-=");
+
+    dimensions_ -= fvmv.dimensions_;
+    lduMatrix::operator-=(fvmv);
+    source_ -= fvmv.source_;
+    internalCoeffs_ -= fvmv.internalCoeffs_;
+    boundaryCoeffs_ -= fvmv.boundaryCoeffs_;
+
+    if (faceFluxCorrectionPtr_ && fvmv.faceFluxCorrectionPtr_)
+    {
+        *faceFluxCorrectionPtr_ -= *fvmv.faceFluxCorrectionPtr_;
+    }
+    else if (fvmv.faceFluxCorrectionPtr_)
+    {
+        faceFluxCorrectionPtr_ =
+            new GeometricField<Type, fvsPatchField, surfaceMesh>
+        (-*fvmv.faceFluxCorrectionPtr_);
+    }
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator-=(const tmp<fvMatrix<Type>>& tfvmv)
+{
+    operator-=(tfvmv());
+    tfvmv.clear();
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator+=
+(
+    const DimensionedField<Type, volMesh>& su
+)
+{
+    checkMethod(*this, su, "+=");
+    source() -= su.mesh().V()*su.field();
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator+=
+(
+    const tmp<DimensionedField<Type, volMesh>>& tsu
+)
+{
+    operator+=(tsu());
+    tsu.clear();
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator+=
+(
+    const tmp<GeometricField<Type, fvPatchField, volMesh>>& tsu
+)
+{
+    operator+=(tsu());
+    tsu.clear();
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator-=
+(
+    const DimensionedField<Type, volMesh>& su
+)
+{
+    checkMethod(*this, su, "-=");
+    source() += su.mesh().V()*su.field();
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator-=
+(
+    const tmp<DimensionedField<Type, volMesh>>& tsu
+)
+{
+    operator-=(tsu());
+    tsu.clear();
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator-=
+(
+    const tmp<GeometricField<Type, fvPatchField, volMesh>>& tsu
+)
+{
+    operator-=(tsu());
+    tsu.clear();
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator+=
+(
+    const dimensioned<Type>& su
+)
+{
+    source() -= psi().mesh().V()*su;
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator-=
+(
+    const dimensioned<Type>& su
+)
+{
+    source() += psi().mesh().V()*su;
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator+=
+(
+    const zero&
+)
+{}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator-=
+(
+    const zero&
+)
+{}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator*=
+(
+    const volScalarField::Internal& dsf
+)
+{
+    dimensions_ *= dsf.dimensions();
+    lduMatrix::operator*=(dsf.field());
+    source_ *= dsf.field();
+
+    forAll(boundaryCoeffs_, patchi)
+    {
+        scalarField pisf
+        (
+            dsf.mesh().boundary()[patchi].patchInternalField(dsf.field())
+        );
+
+        internalCoeffs_[patchi] *= pisf;
+        boundaryCoeffs_[patchi] *= pisf;
+    }
+
+    if (faceFluxCorrectionPtr_)
+    {
+        volScalarField dsfField
+        (
+            dsf.name(),
+            dsf.db(),
+            dsf.mesh(),
+            dsf.dimensions()
+        );
+        dsfField.ref() = dsf;
+        dsfField.correctBoundaryConditions();
+        *faceFluxCorrectionPtr_ *= fvc::interpolate(dsfField);
+    }
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator*=
+(
+    const tmp<volScalarField::Internal>& tdsf
+)
+{
+    operator*=(tdsf());
+    tdsf.clear();
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator*=
+(
+    const tmp<volScalarField>& tvsf
+)
+{
+    operator*=(tvsf());
+    tvsf.clear();
+}
+
+
+template<class Type>
+void Foam::fvMatrix<Type>::operator*=
+(
+    const dimensioned<scalar>& ds
+)
+{
+    dimensions_ *= ds.dimensions();
+    lduMatrix::operator*=(ds.value());
+    source_ *= ds.value();
+    internalCoeffs_ *= ds.value();
+    boundaryCoeffs_ *= ds.value();
+
+    if (faceFluxCorrectionPtr_)
+    {
+        *faceFluxCorrectionPtr_ *= ds.value();
+    }
+}
+
+
+// * * * * * * * * * * * * * * * * Solvers * * * * * * * * * * * * * * * * * //
+
+#include "fvMatrices/fvMatrix/fvMatrixSolve.C"
+
+// ************************************************************************* //

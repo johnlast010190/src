@@ -1,0 +1,138 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2016 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "db/error/error.H"
+#include "meshes/meshShapes/cellModel/cellModel.H"
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+inline const Foam::word& Foam::cellModel::name() const
+{
+    return name_;
+}
+
+
+inline Foam::label Foam::cellModel::index() const
+{
+    return index_;
+}
+
+
+inline Foam::label Foam::cellModel::nPoints() const
+{
+    return nPoints_;
+}
+
+
+inline Foam::label Foam::cellModel::nEdges() const
+{
+    return edges_.size();
+}
+
+
+inline Foam::label Foam::cellModel::nFaces() const
+{
+    return faces_.size();
+}
+
+
+//  Return the faces of a cellModel by untangling the geometry
+//  supplied in terms of the face labels
+inline Foam::edgeList Foam::cellModel::edges
+(
+    const UList<label>& pointLabels
+) const
+{
+    edgeList e(edges_.size());
+
+    // Translate model lebels into global labels
+    forAll(edges_, edgeI)
+    {
+         e[edgeI] =
+             edge
+             (
+                 pointLabels[edges_[edgeI].start()],
+                 pointLabels[edges_[edgeI].end()]
+             );
+    }
+
+    return e;
+}
+
+
+inline const Foam::faceList& Foam::cellModel::modelFaces() const
+{
+    return faces_;
+}
+
+
+//  Return the faces of a cellModel by untangling the geometry
+//  supplied in terms of the face labels
+inline Foam::faceList Foam::cellModel::faces
+(
+    const UList<label>& pointLabels
+) const
+{
+    faceList f(faces_.size());
+
+    // Translate model lebels into global labels
+    forAll(faces_, facei)
+    {
+         const labelList& curModelLabels = faces_[facei];
+
+         face& curFace = f[facei];
+
+         curFace.setSize(curModelLabels.size());
+
+         forAll(curModelLabels, labelI)
+         {
+             curFace[labelI] = pointLabels[curModelLabels[labelI]];
+         }
+    }
+
+    return f;
+}
+
+
+// * * * * * * * * * * * * * * * Friend Operators  * * * * * * * * * * * * * //
+
+// Equality operator: true => ptr to models are equal !
+inline bool Foam::operator==(const cellModel& m1, const cellModel& m2)
+{
+    return (&m1 == &m2);
+}
+
+// Inequality operator: true => ptr to models are not equal !
+inline bool Foam::operator!=(const cellModel& m1, const cellModel& m2)
+{
+    return (&m1 != &m2);
+}
+
+
+// ************************************************************************* //

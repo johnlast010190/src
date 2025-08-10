@@ -1,0 +1,158 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2017 OpenCFD Ltd.
+    (c) 2020 Esi Ltd.
+
+Class
+    Foam::fv::viscousDissipation
+
+Group
+    grpFvOptionsSources
+
+Description
+    Calculates and applies the viscous dissipation energy source to the energy
+    equation.
+
+Usage
+    Example usage:
+    \verbatim
+    fields          (h);                    // Name of energy field
+    \endverbatim
+
+SourceFiles
+    viscousDissipation.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef viscousDissipation_H
+#define viscousDissipation_H
+
+#include "cfdTools/general/fvOptions/fvOption.H"
+#include "fields/UniformDimensionedFields/uniformDimensionedFields.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+namespace fv
+{
+
+/*---------------------------------------------------------------------------*\
+                    Class viscousDissipation Declaration
+\*---------------------------------------------------------------------------*/
+
+class viscousDissipation
+:
+    public option
+{
+    // Private data
+
+        //- Name of velocity field; default = U
+        word UName_;
+
+        //- Name of the rho field for incompressible solvers
+        word rhoName_;
+
+        //- Density for single phase flows
+        dimensionedScalar rho_;
+
+
+     // Private Member Functions
+
+        //- Return the viscosity field
+        tmp<volSymmTensorField> devRhoReff() const;
+
+        //- No copy construct
+        viscousDissipation(const viscousDissipation&) = delete;
+
+        //- No copy assignment
+        void operator=(const viscousDissipation&) = delete;
+
+private:
+
+    // Private member functions
+
+
+        //- Return rho field
+        tmp<volScalarField> rho() const;
+
+
+public:
+
+    //- Runtime type information
+    TypeName("viscousDissipation");
+
+
+    // Constructors
+
+        //- Construct from explicit source name and mesh
+        viscousDissipation
+        (
+            const word& sourceName,
+            const word& modelType,
+            const dictionary& dict,
+            const objectRegistry& obr
+        );
+
+
+    // Member Functions
+
+        //- Initialise after all fvOptions created
+        virtual bool initialise() override;
+
+        //- Add explicit contribution to compressible energy equation
+        virtual void addSup
+        (
+            const volScalarField& rho,
+            fvMatrix<scalar>& eqn,
+            const label fieldi
+        ) override;
+
+        //- Add explicit contribution to incompressible energy equation
+        virtual void addSup
+        (
+            fvMatrix<scalar>& eqn,
+            const label fieldi
+        ) override;
+
+        //- Read source dictionary
+        virtual bool read(const dictionary& dict) override
+        {
+            return true;
+        }
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace fv
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

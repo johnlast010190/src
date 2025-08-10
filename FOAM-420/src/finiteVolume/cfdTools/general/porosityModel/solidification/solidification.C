@@ -1,0 +1,188 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2017 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "db/runTimeSelection/construction/addToRunTimeSelectionTable.H"
+#include "cfdTools/general/porosityModel/solidification/solidification.H"
+#include "fields/GeometricFields/geometricOneField/geometricOneField.H"
+#include "fvMatrices/fvMatrices.H"
+
+// * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
+
+namespace Foam
+{
+    namespace porosityModels
+    {
+        defineTypeNameAndDebug(solidification, 0);
+        addToRunTimeSelectionTable(porosityModel, solidification, mesh);
+    }
+}
+
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+Foam::porosityModels::solidification::solidification
+(
+    const word& name,
+    const word& modelType,
+    const objectRegistry& obr,
+    const fvMesh& mesh,
+    const dictionary& dict,
+    const word& cellZoneName
+)
+:
+    porosityModel(name, modelType, obr, mesh, dict, cellZoneName),
+    TName_(coeffs_.lookupOrDefault<word>("T", "T")),
+    alphaName_(coeffs_.lookupOrDefault<word>("alpha", "none")),
+    rhoName_(coeffs_.lookupOrDefault<word>("rho", "rho")),
+    D_(Function1<scalar>::New("D", coeffs_))
+{}
+
+
+// * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * * //
+
+Foam::porosityModels::solidification::~solidification()
+{}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+void Foam::porosityModels::solidification::calcTransformModelData()
+{}
+
+
+void Foam::porosityModels::solidification::calcForce
+(
+    const volVectorField& U,
+    const volScalarField& rho,
+    const volScalarField& mu,
+    vectorField& force
+) const
+{
+    scalarField Udiag(U.size(), 0.0);
+    const scalarField& V = mesh_.V();
+
+    apply(Udiag, V, rho, U);
+
+    force = Udiag*U;
+}
+
+
+void Foam::porosityModels::solidification::correct
+(
+    fvVectorMatrix& UEqn
+) const
+{
+    const volVectorField& U = UEqn.psi();
+    const scalarField& V = mesh_.V();
+    scalarField& Udiag = UEqn.diag();
+
+    if (UEqn.dimensions() == dimForce)
+    {
+        const volScalarField& rho = obr_.lookupObject<volScalarField>
+        (
+            IOobject::groupName(rhoName_, U.group())
+        );
+
+        apply(Udiag, V, rho, U);
+    }
+    else
+    {
+        apply(Udiag, V, geometricOneField(), U);
+    }
+}
+
+
+void Foam::porosityModels::solidification::correct
+(
+    fvVectorMatrix& UEqn,
+    const volScalarField& rho,
+    const volScalarField& mu
+) const
+{
+    const volVectorField& U = UEqn.psi();
+    const scalarField& V = mesh_.V();
+    scalarField& Udiag = UEqn.diag();
+
+    apply(Udiag, V, rho, U);
+}
+
+
+void Foam::porosityModels::solidification::correct
+(
+    const fvVectorMatrix& UEqn,
+    volTensorField& AU
+) const
+{
+    const volVectorField& U = UEqn.psi();
+
+    if (UEqn.dimensions() == dimForce)
+    {
+        const volScalarField& rho = obr_.lookupObject<volScalarField>
+        (
+            IOobject::groupName(rhoName_, U.group())
+        );
+
+        apply(AU, rho, U);
+    }
+    else
+    {
+        apply(AU, geometricOneField(), U);
+    }
+}
+
+
+void Foam::porosityModels::solidification::adjointCorrect
+(
+    fvVectorMatrix& UaEqn,
+    const volVectorField& Uprimal
+) const
+{
+}
+
+
+void Foam::porosityModels::solidification::adjointCorrect
+(
+    fvVectorMatrix& UaEqn,
+    const volScalarField& rho,
+    const volScalarField& mu,
+    const volVectorField& Uprimal
+) const
+{
+}
+
+bool Foam::porosityModels::solidification::writeData(Ostream& os) const
+{
+    os  << indent << name_ << endl;
+    dict_.write(os);
+
+    return true;
+}
+
+
+// ************************************************************************* //

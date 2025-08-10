@@ -1,0 +1,141 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2016-2018 OpenCFD Ltd.
+
+Class
+    Foam::vtk::asciiFormatter
+
+Description
+    Inline ASCII output.
+    Adds spaces between entries and a newline every 6 items
+    (for consistency with what VTK itself outputs).
+
+SourceFiles
+    foamVtkAsciiFormatter.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef foamVtkAsciiFormatter_H
+#define foamVtkAsciiFormatter_H
+
+#include "vtk/format/foamVtkFormatter.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+namespace vtk
+{
+
+/*---------------------------------------------------------------------------*\
+                     Class vtk::asciiFormatter Declaration
+\*---------------------------------------------------------------------------*/
+
+class asciiFormatter
+:
+    public formatter
+{
+    // Private Data Members
+
+        static const char* name_;
+        static const outputOptions opts_;
+
+        //- Track the current output position
+        unsigned short pos_;
+
+
+    // Private Member Functions
+
+        //- Advance to next position, adding space or newline as needed
+        inline void next();
+
+        //- Finish an output line, adding newline as needed
+        inline void done();
+
+
+        //- No copy construct
+        asciiFormatter(const asciiFormatter&) = delete;
+
+        //- No copy assignment
+        void operator=(const asciiFormatter&) = delete;
+
+
+public:
+
+    // Constructors
+
+        //- Construct and attach to an output stream, use default precision
+        asciiFormatter(std::ostream& os);
+
+        //- Construct and attach to an output stream, use specified precision
+        asciiFormatter(std::ostream& os, unsigned precision);
+
+
+    //- Destructor. Finishes the output line as required.
+    virtual ~asciiFormatter();
+
+
+    // Member Functions
+
+        //- The output is INLINE_ASCII.
+        virtual const outputOptions& opts() const;
+
+        //- Name for the XML output type ("ascii")
+        virtual const char* name() const;
+
+        //- Name for the XML append encoding - unused.
+        //  Currently identical to name(), but do not rely on this.
+        virtual const char* encoding() const;
+
+
+        //- Write leading size - this is a no-op for ascii output
+        //  \return False - never used by this format
+        virtual bool writeSize(const uint64_t ignored);
+
+        virtual void write(const uint8_t val);
+        virtual void write(const label val);
+        virtual void write(const float val);
+        virtual void write(const double val);
+
+        //- Write a newline if needed to finish a line of output.
+        virtual void flush();
+
+        //- The encoded length for ascii output is not applicable.
+        //  \return 0
+        virtual std::size_t encodedLength(std::size_t ignored) const;
+
+};
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace vtk
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

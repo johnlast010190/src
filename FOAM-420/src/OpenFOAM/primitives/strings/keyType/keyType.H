@@ -1,0 +1,183 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2016 OpenFOAM Foundation
+
+Class
+    Foam::keyType
+
+Description
+    A class for handling keywords in dictionaries.
+
+    A keyType is the keyword of a dictionary.
+    It differs from word in that it also accepts patterns (regular expressions).
+    It is very similar to wordRe, but doesn't store the regular expression
+    separately.
+
+SourceFiles
+    keyType.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef keyType_H
+#define keyType_H
+
+#include "primitives/strings/word/word.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+
+// Forward declaration of classes
+class Istream;
+class Ostream;
+
+// Forward declaration of friend functions and operators
+class keyType;
+Istream& operator>>(Istream& is, keyType& kw);
+Ostream& operator<<(Ostream& os, const keyType& kw);
+
+
+/*---------------------------------------------------------------------------*\
+                           Class keyType Declaration
+\*---------------------------------------------------------------------------*/
+
+class keyType
+:
+    public word
+{
+    // Private data
+
+        //- Is the keyType a pattern (regular expression)
+        bool isPattern_;
+
+    // Private Member Functions
+
+        //- Disallow assignments where we cannot determine string/word type
+        void operator=(const std::string&) = delete;
+
+public:
+
+    // Static data members
+
+        //- An empty keyType
+        static const keyType null;
+
+
+    // Public data types
+
+        //- Enumeration for search/match modes as bitmask
+        //  eg, (keyType::REGEX | keyType::RECURSIVE)
+        enum option
+        {
+            LITERAL = 0,        //!< String literal
+            REGEX   = 1,        //!< Regular expression
+            RECURSIVE = 0x10,   //!< Recursive search (eg, in dictionary)
+            LITERAL_RECURSIVE = (LITERAL | RECURSIVE),
+            REGEX_RECURSIVE   = (REGEX | RECURSIVE)
+        };
+
+
+    // Constructors
+
+        //- Construct null
+        inline keyType();
+
+        //- Construct as copy, retaining type (literal or regex)
+        inline keyType(const keyType& s);
+
+        //- Construct as copy of word. Not treated as a regular expression
+        inline keyType(const word& s);
+
+        //- Construct as copy of string. Treat as regular expression.
+        inline keyType(const string& s);
+
+        //- Construct as copy of character array.
+        //  Not treated as a regular expression
+        inline keyType(const char* s);
+
+        //- Construct as copy of std::string with specified treatment
+        inline keyType(const std::string& s, const bool isPattern);
+
+        //- Construct from Istream
+        //  Treat as regular expression if surrounded by quotation marks.
+        keyType(Istream& is);
+
+
+    // Member functions
+
+        //- Treat as a pattern rather than a literal string?
+        inline bool isPattern() const;
+
+        //- Smart match as regular expression or as a string.
+        //  Optionally force a literal match only
+        bool match(const std::string& text, bool literal = false) const;
+
+
+    // Member operators
+
+        //- Avoid masking the normal operator()
+        using word::operator();
+
+        //- Perform smart match on text
+        inline bool operator()(const std::string& text) const;
+
+
+      // Assignment
+
+        //- Assignment operator, retaining type (literal or regex)
+        inline void operator=(const keyType& s);
+
+        //- Assign as word, not treated as a regular expression.
+        inline void operator=(const word& s);
+
+        //- Assign as regular expression
+        inline void operator=(const string& s);
+
+        //- Assign as word, not treated as a regular expression.
+        inline void operator=(const char* s);
+
+
+    // IOstream operators
+
+        friend Istream& operator>>(Istream& is, keyType& kw);
+        friend Ostream& operator<<(Ostream& os, const keyType& kw);
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#include "primitives/strings/keyType/keyTypeI.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

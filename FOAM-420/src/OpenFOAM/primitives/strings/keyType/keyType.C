@@ -1,0 +1,124 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2015 OpenFOAM Foundation
+
+Description
+    Istream constructor and IOstream operators for keyType.
+
+\*---------------------------------------------------------------------------*/
+
+#include "primitives/strings/keyType/keyType.H"
+#include "regExp.H"
+#include "db/IOstreams/IOstreams.H"
+
+// * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
+
+const Foam::keyType Foam::keyType::null;
+
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+Foam::keyType::keyType(Istream& is)
+:
+    word(),
+    isPattern_(false)
+{
+    is  >> *this;
+}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+bool Foam::keyType::match(const std::string& text, bool literal) const
+{
+    if (literal || !isPattern_)
+    {
+        return !compare(text);  // Compare as literal string
+    }
+    else
+    {
+        return regExp(*this).match(text);  // Match as regex
+    }
+}
+
+
+// * * * * * * * * * * * * * * * IOstream Operators  * * * * * * * * * * * * //
+
+Foam::Istream& Foam::operator>>(Istream& is, keyType& kw)
+{
+    token t(is);
+
+    if (!t.good())
+    {
+        is.setBad();
+        return is;
+    }
+
+    if (t.isWord())
+    {
+        kw = t.wordToken();
+    }
+    else if (t.isString())
+    {
+        // Assign from string. Set as regular expression.
+        kw = t.stringToken();
+        kw.isPattern_ = true;
+
+        // flag empty strings as an error
+        if (kw.empty())
+        {
+            is.setBad();
+            FatalIOErrorInFunction(is)
+                << "empty word/expression "
+                << exit(FatalIOError);
+            return is;
+        }
+    }
+    else
+    {
+        is.setBad();
+        FatalIOErrorInFunction(is)
+            << "wrong token type - expected word or string, found "
+            << t.info()
+            << exit(FatalIOError);
+
+        return is;
+    }
+
+    is.check(FUNCTION_NAME);
+    return is;
+}
+
+
+Foam::Ostream& Foam::operator<<(Ostream& os, const keyType& kw)
+{
+    os.write(kw);
+    os.check(FUNCTION_NAME);
+    return os;
+}
+
+
+// ************************************************************************* //

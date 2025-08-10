@@ -1,0 +1,105 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2013-2016 OpenFOAM Foundation
+
+Class
+    Foam::functionObjects::Lambda2
+
+Group
+    grpFieldFunctionObjects
+
+Description
+    Calculates and outputs the second largest eigenvalue of the sum of the
+    square of the symmetrical and anti-symmetrical parts of the velocity
+    gradient tensor.
+
+See also
+    Foam::functionObjects::fieldExpression
+    Foam::functionObjects::fvMeshFunctionObject
+
+SourceFiles
+    Lambda2.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef functionObjects_Lambda2_H
+#define functionObjects_Lambda2_H
+
+#include "fieldExpression/fieldExpression.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+namespace functionObjects
+{
+
+/*---------------------------------------------------------------------------*\
+                          Class Lambda2 Declaration
+\*---------------------------------------------------------------------------*/
+
+class Lambda2
+:
+    public fieldExpression
+{
+    // Private Member Functions
+
+        //- Calculate the Lambda2 field and return true if successful
+        virtual bool calc();
+
+
+public:
+
+    //- Runtime type information
+    TypeName("Lambda2");
+
+
+    // Constructors
+
+        //- Construct from Time and dictionary
+        Lambda2
+        (
+            const word& name,
+            const Time& runTime,
+            const dictionary& dict
+        );
+
+
+    //- Destructor
+    virtual ~Lambda2();
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace functionObjects
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

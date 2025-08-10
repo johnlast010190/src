@@ -1,0 +1,9 @@
+#include "cfdTools/general/include/readTimeControls.H"
+
+correctPhi = pimple.dict().lookupOrDefault<Switch>("correctPhi", false);
+
+checkMeshCourantNo =
+    pimple.dict().lookupOrDefault<Switch>("checkMeshCourantNo", false);
+
+Switch ddtPhiCorr =
+    pimple.dict().lookupOrDefault<Switch>("ddtPhiCorr", true);

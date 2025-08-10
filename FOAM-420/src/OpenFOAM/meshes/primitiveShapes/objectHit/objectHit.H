@@ -1,0 +1,134 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011 OpenFOAM Foundation
+
+Class
+    Foam::objectHit
+
+Description
+    This class describes a combination of target object index and success flag.
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef objectHit_H
+#define objectHit_H
+
+#include "primitives/bools/bool/bool.H"
+#include "primitives/ints/label/label.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+
+/*---------------------------------------------------------------------------*\
+                           Class objectHit Declaration
+\*---------------------------------------------------------------------------*/
+
+class objectHit
+{
+    // Private data
+
+        //- Hit success
+        bool hit_;
+
+        //- Object of hit
+        label hitObject_;
+
+
+public:
+
+    // Constructors
+
+        //- Construct null
+        objectHit()
+        :
+            hit_(false),
+            hitObject_(-1)
+        {}
+
+        //- Construct from components
+        objectHit(const bool success, const label obj)
+        :
+            hit_(success),
+            hitObject_(obj)
+        {}
+
+        //- Construct from Istream
+        objectHit(Istream& is)
+        :
+            hit_(readBool(is)),
+            hitObject_(readLabel(is))
+        {}
+
+
+    // Member Functions
+
+        //- Is there a hit
+        inline bool hit() const
+        {
+            return hit_;
+        }
+
+        //- Return hit object
+        inline label hitObject() const
+        {
+            return hitObject_;
+        }
+
+
+    // Ostream operator
+
+        inline friend Ostream& operator<<(Ostream& os, const objectHit& obj)
+        {
+             return os << obj.hit() << token::SPACE << obj.hitObject();
+        }
+};
+
+
+// Global Operators
+
+inline bool operator==(const objectHit& a, const objectHit& b)
+{
+    return a.hit() == b.hit() && a.hitObject() == b.hitObject();
+}
+
+
+inline bool operator!=(const objectHit& a, const objectHit& b)
+{
+    return !(a == b);
+}
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

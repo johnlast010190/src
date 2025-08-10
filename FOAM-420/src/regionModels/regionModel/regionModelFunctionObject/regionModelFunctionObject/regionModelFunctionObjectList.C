@@ -1,0 +1,128 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2012-2017 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "regionModelFunctionObject/regionModelFunctionObject/regionModelFunctionObjectList.H"
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+Foam::regionModels::regionModelFunctionObjectList::regionModelFunctionObjectList
+(
+    regionModel& region
+)
+:
+    PtrList<regionModelFunctionObject>(),
+    regionModel_(region),
+    dict_(dictionary::null)
+{}
+
+
+Foam::regionModels::regionModelFunctionObjectList::regionModelFunctionObjectList
+(
+    regionModel& region,
+    const dictionary& dict,
+    const bool readFields
+)
+:
+    PtrList<regionModelFunctionObject>(),
+    regionModel_(region),
+    dict_(dict)
+{
+    if (readFields)
+    {
+        wordList modelNames(dict.toc());
+
+        Info<< "    Selecting region model functions" << endl;
+
+        if (modelNames.size() > 0)
+        {
+            this->setSize(modelNames.size());
+
+            forAll(modelNames, i)
+            {
+                const word& modelName = modelNames[i];
+
+                this->set
+                (
+                    i,
+                    regionModelFunctionObject::New
+                    (
+                        dict,
+                        region,
+                        modelName
+                    )
+                );
+            }
+        }
+        else
+        {
+            Info<< "    none" << endl;
+        }
+    }
+}
+
+
+Foam::regionModels::regionModelFunctionObjectList::regionModelFunctionObjectList
+(
+    const regionModelFunctionObjectList& cfol
+)
+:
+    PtrList<regionModelFunctionObject>(cfol),
+    regionModel_(cfol.regionModel_),
+    dict_(cfol.dict_)
+{}
+
+
+// * * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * //
+
+Foam::regionModels::regionModelFunctionObjectList::
+~regionModelFunctionObjectList()
+{}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+void Foam::regionModels::regionModelFunctionObjectList::preEvolveRegion()
+{
+    forAll(*this, i)
+    {
+        this->operator[](i).preEvolveRegion();
+    }
+}
+
+
+void Foam::regionModels::regionModelFunctionObjectList::postEvolveRegion()
+{
+    forAll(*this, i)
+    {
+        this->operator[](i).postEvolveRegion();
+    }
+}
+
+
+// ************************************************************************* //

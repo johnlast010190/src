@@ -1,0 +1,546 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2016 OpenFOAM Foundation
+    (c) 2016-2017 OpenCFD Ltd.
+    (c) 2017 Esi Ltd.
+
+\*---------------------------------------------------------------------------*/
+
+#include "meshes/primitiveShapes/plane/plane.H"
+#include "primitives/Tensor/tensor/tensor.H"
+
+// * * * * * * * * * * * * * Private Member Functions  * * * * * * * * * * * //
+
+void Foam::plane::calcPntAndVec(const scalarList& C)
+{
+    if (mag(C[0]) > VSMALL)
+    {
+        point_ = vector((-C[3]/C[0]), 0, 0);
+    }
+    else
+    {
+        if (mag(C[1]) > VSMALL)
+        {
+            point_ = vector(0, (-C[3]/C[1]), 0);
+        }
+        else
+        {
+            if (mag(C[2]) > VSMALL)
+            {
+                point_ = vector(0, 0, (-C[3]/C[2]));
+            }
+            else
+            {
+                FatalErrorInFunction
+                    << "At least one plane coefficient must have a value"
+                    << abort(FatalError);
+            }
+        }
+    }
+
+    normal_ = vector(C[0], C[1], C[2]);
+    scalar magUnitVector(mag(normal_));
+
+    if (magUnitVector < VSMALL)
+    {
+        FatalErrorInFunction
+            << "Plane normal defined with zero length"
+            << abort(FatalError);
+    }
+
+    normal_ /= magUnitVector;
+}
+
+
+void Foam::plane::calcPntAndVec
+(
+    const point& point1,
+    const point& point2,
+    const point& point3
+)
+{
+    point_ = (point1 + point2 + point3)/3;
+    vector line12 = point1 - point2;
+    vector line23 = point2 - point3;
+
+    if
+    (
+        mag(line12) < VSMALL
+     || mag(line23) < VSMALL
+     || mag(point3-point1) < VSMALL
+    )
+    {
+        FatalErrorInFunction
+            << "Bad points:" << point1 << ' ' << point2 << ' ' << point3
+            << abort(FatalError);
+    }
+
+    normal_ = line12 ^ line23;
+    scalar magUnitVector(mag(normal_));
+
+    if (magUnitVector < VSMALL)
+    {
+        normal_ = line12 / mag(line12);
+        WarningInFunction
+            << "Plane normal defined with zero length "
+            << "which may indicate a problem" << nl
+            << "Bad points:" << point1 << ' ' << point2 << ' ' << point3 << nl
+            << "Setting to (point1 - point2) edge direction: " << normal_
+            << endl;
+    }
+    else
+    {
+        normal_ /= magUnitVector;
+    }
+}
+
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+// Construct null
+Foam::plane::plane()
+:
+    normal_(Zero),
+    point_(Zero)
+{}
+
+
+// Construct from normal vector through the origin
+Foam::plane::plane(const vector& normalVector)
+:
+    normal_(normalVector),
+    point_(Zero)
+{
+    scalar magUnitVector(mag(normal_));
+
+    if (magUnitVector > VSMALL)
+    {
+        normal_ /= magUnitVector;
+    }
+    else
+    {
+        FatalErrorInFunction
+            << "plane normal has zero length. basePoint:" << point_
+            << abort(FatalError);
+    }
+}
+
+
+Foam::plane::plane
+(
+    const point& basePoint,
+    const vector& normalVector,
+    const bool normalise
+)
+:
+    normal_(normalVector),
+    point_(basePoint)
+{
+    scalar magSqrNormalVector(magSqr(normal_));
+
+    if (magSqrNormalVector < VSMALL)
+    {
+        FatalErrorInFunction
+            << "plane normal has zero length. basePoint:" << point_
+            << abort(FatalError);
+    }
+
+    if (normalise)
+    {
+        normal_ /= Foam::sqrt(magSqrNormalVector);
+    }
+}
+
+
+Foam::plane::plane(const scalarList& C)
+{
+    calcPntAndVec(C);
+}
+
+
+Foam::plane::plane
+(
+    const point& a,
+    const point& b,
+    const point& c
+)
+{
+    calcPntAndVec(a, b, c);
+}
+
+
+Foam::plane::plane(const dictionary& dict)
+:
+    normal_(Zero),
+    point_(Zero)
+{
+    const word planeType(dict.lookup("planeType"));
+
+    if (planeType == "planeEquation")
+    {
+        const dictionary& subDict = dict.subDict("planeEquationDict");
+        scalarList C(4);
+
+        C[0] = readScalar(subDict.lookup("a"));
+        C[1] = readScalar(subDict.lookup("b"));
+        C[2] = readScalar(subDict.lookup("c"));
+        C[3] = readScalar(subDict.lookup("d"));
+
+        calcPntAndVec(C);
+
+    }
+    else if (planeType == "embeddedPoints")
+    {
+        const dictionary& subDict = dict.subDict("embeddedPointsDict");
+
+        point point1(subDict.lookup("point1"));
+        point point2(subDict.lookup("point2"));
+        point point3(subDict.lookup("point3"));
+
+        calcPntAndVec(point1, point2, point3);
+    }
+    else if (planeType == "pointAndNormal")
+    {
+        const dictionary& subDict = dict.subDict("pointAndNormalDict");
+
+        point_ =
+            subDict.found("basePoint")
+          ? subDict.lookup("basePoint")
+          : subDict.lookup("point");
+
+        normal_ =
+            subDict.found("normalVector")
+          ? subDict.lookup("normalVector")
+          : subDict.lookup("normal");
+
+        normal_ /= mag(normal_);
+    }
+    else
+    {
+        FatalIOErrorInFunction(dict)
+            << "Invalid plane type: " << planeType << nl
+            << "Valid options include: planeEquation, embeddedPoints and "
+            << "pointAndNormal"
+            << abort(FatalIOError);
+    }
+}
+
+
+Foam::plane::plane(Istream& is)
+:
+    normal_(is),
+    point_(is)
+{
+    scalar magUnitVector(mag(normal_));
+
+    if (magUnitVector > VSMALL)
+    {
+        normal_ /= magUnitVector;
+    }
+    else
+    {
+        FatalErrorInFunction
+            << "plane normal has zero length. basePoint:" << point_
+            << abort(FatalError);
+    }
+}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+const Foam::vector& Foam::plane::normal() const
+{
+    return normal_;
+}
+
+// Return plane normal vector, non-const access
+Foam::vector& Foam::plane::normal()
+{
+    return normal_;
+}
+
+
+const Foam::point& Foam::plane::refPoint() const
+{
+    return point_;
+}
+
+// Return plane base point, non-const access
+Foam::point& Foam::plane::refPoint()
+{
+    return point_;
+}
+
+
+Foam::FixedList<Foam::scalar, 4> Foam::plane::planeCoeffs() const
+{
+    FixedList<scalar, 4> C(4);
+
+    scalar magX = mag(normal_.x());
+    scalar magY = mag(normal_.y());
+    scalar magZ = mag(normal_.z());
+
+    if (magX > magY)
+    {
+        if (magX > magZ)
+        {
+            C[0] = 1;
+            C[1] = normal_.y()/normal_.x();
+            C[2] = normal_.z()/normal_.x();
+        }
+        else
+        {
+            C[0] = normal_.x()/normal_.z();
+            C[1] = normal_.y()/normal_.z();
+            C[2] = 1;
+        }
+    }
+    else
+    {
+        if (magY > magZ)
+        {
+            C[0] = normal_.x()/normal_.y();
+            C[1] = 1;
+            C[2] = normal_.z()/normal_.y();
+        }
+        else
+        {
+            C[0] = normal_.x()/normal_.z();
+            C[1] = normal_.y()/normal_.z();
+            C[2] = 1;
+        }
+    }
+
+    C[3] = - C[0] * point_.x()
+           - C[1] * point_.y()
+           - C[2] * point_.z();
+
+    return C;
+}
+
+
+Foam::point Foam::plane::nearestPoint(const point& p) const
+{
+    return p - normal_*((p - point_) & normal_);
+}
+
+
+Foam::scalar Foam::plane::distance(const point& p) const
+{
+    return mag((p - point_) & normal_);
+}
+
+
+Foam::scalar Foam::plane::normalIntersect
+(
+    const point& pnt0,
+    const vector& dir
+) const
+{
+    scalar denom = stabilise((dir & normal_), VSMALL);
+
+    return ((point_ - pnt0) & normal_)/denom;
+}
+
+
+Foam::plane::ray Foam::plane::planeIntersect(const plane& plane2) const
+{
+    // Mathworld plane-plane intersection. Assume there is a point on the
+    // intersection line with z=0 and solve the two plane equations
+    // for that (now 2x2 equation in x and y)
+    // Better: use either z=0 or x=0 or y=0.
+
+    const vector& n1 = normal();
+    const vector& n2 = plane2.normal();
+
+    const point& p1 = refPoint();
+    const point& p2 = plane2.refPoint();
+
+    scalar n1p1 = n1&p1;
+    scalar n2p2 = n2&p2;
+
+    vector dir = n1 ^ n2;
+
+    // Determine zeroed out direction (can be x,y or z) by looking at which
+    // has the largest component in dir.
+    scalar magX = mag(dir.x());
+    scalar magY = mag(dir.y());
+    scalar magZ = mag(dir.z());
+
+    direction iZero, i1, i2;
+
+    if (magX > magY)
+    {
+        if (magX > magZ)
+        {
+            iZero = 0;
+            i1 = 1;
+            i2 = 2;
+        }
+        else
+        {
+            iZero = 2;
+            i1 = 0;
+            i2 = 1;
+        }
+    }
+    else
+    {
+        if (magY > magZ)
+        {
+            iZero = 1;
+            i1 = 2;
+            i2 = 0;
+        }
+        else
+        {
+            iZero = 2;
+            i1 = 0;
+            i2 = 1;
+        }
+    }
+
+    vector pt;
+
+    pt[iZero] = 0;
+    pt[i1] = (n2[i2]*n1p1 - n1[i2]*n2p2) / (n1[i1]*n2[i2] - n2[i1]*n1[i2]);
+    pt[i2] = (n2[i1]*n1p1 - n1[i1]*n2p2) / (n1[i2]*n2[i1] - n1[i1]*n2[i2]);
+
+    return ray(pt, dir);
+}
+
+
+Foam::point Foam::plane::planePlaneIntersect
+(
+    const plane& plane2,
+    const plane& plane3
+) const
+{
+    FixedList<scalar, 4> coeffs1(planeCoeffs());
+    FixedList<scalar, 4> coeffs2(plane2.planeCoeffs());
+    FixedList<scalar, 4> coeffs3(plane3.planeCoeffs());
+
+    tensor a
+    (
+        coeffs1[0],coeffs1[1],coeffs1[2],
+        coeffs2[0],coeffs2[1],coeffs2[2],
+        coeffs3[0],coeffs3[1],coeffs3[2]
+    );
+
+    vector b(coeffs1[3],coeffs2[3],coeffs3[3]);
+
+    return (inv(a) & (-b));
+}
+
+
+Foam::point Foam::plane::somePointInPlane(const scalar dist) const
+{
+    // ax + by + cz + d = 0
+    const FixedList<scalar, 4> coeff(planeCoeffs());
+
+    // Perturb the base-point
+    point p = refPoint() + point::uniform(dist);
+
+    if (Foam::mag(coeff[2]) < SMALL)
+    {
+        if (Foam::mag(coeff[1]) < SMALL)
+        {
+            p[0] = -1.0*(coeff[1]*p[1] + coeff[2]*p[2] + coeff[3])/coeff[0];
+        }
+        else
+        {
+            p[1] = -1.0*(coeff[0]*p[0] + coeff[2]*p[2] + coeff[3])/coeff[1];
+        }
+    }
+    else
+    {
+        p[2] = -1.0*(coeff[0]*p[0] + coeff[1]*p[1] + coeff[3])/coeff[2];
+    }
+
+    return p;
+}
+
+
+Foam::plane::side Foam::plane::sideOfPlane(const point& p) const
+{
+    const scalar angle((p - point_) & normal_);
+
+    return (angle < 0 ? FLIP : NORMAL);
+}
+
+
+Foam::point Foam::plane::mirror(const point& p) const
+{
+    const vector mirroredPtDir = p - nearestPoint(p);
+
+    if ((normal() & mirroredPtDir) > 0)
+    {
+        return p - 2.0*distance(p)*normal();
+    }
+    else
+    {
+        return p + 2.0*distance(p)*normal();
+    }
+}
+
+
+void Foam::plane::writeDict(Ostream& os) const
+{
+    os.writeEntry("planeType", "pointAndNormal");
+
+    os.beginBlock("pointAndNormalDict");
+
+    os.writeEntry("point",  point_);
+    os.writeEntry("normal", normal_);
+
+    os.endBlock() << flush;
+}
+
+// * * * * * * * * * * * * * * * Global Operators  * * * * * * * * * * * * * //
+
+bool Foam::operator==(const plane& a, const plane& b)
+{
+    return (a.refPoint() == b.refPoint() && a.normal() == b.normal());
+}
+
+
+bool Foam::operator!=(const plane& a, const plane& b)
+{
+    return !(a == b);
+}
+
+
+// * * * * * * * * * * * * * * * Friend Functions  * * * * * * * * * * * * * //
+
+Foam::Ostream& Foam::operator<<(Ostream& os, const plane& pln)
+{
+    os  << pln.normal_ << token::SPACE << pln.point_;
+
+    return os;
+}
+
+
+// ************************************************************************* //

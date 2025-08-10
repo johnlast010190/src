@@ -1,0 +1,141 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  plus                                  |
+|   \\  /    A nd           | Web:      www.OpenFOAM.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+application     simpleFoam;
+
+startFrom       latestTime;
+
+startTime       0;
+
+stopAt          endTime;
+
+endTime         15000;
+
+deltaT          1;
+
+writeControl    timeStep;
+
+writeInterval   15000;
+
+purgeWrite      0;
+
+writeFormat     ascii;
+
+writePrecision  6;
+
+writeCompression off;
+
+timeFormat      general;
+
+timePrecision   6;
+
+runTimeModifiable true;
+
+libs            ( "libutilityFunctionObjects.so" );
+
+functions
+{
+    LD
+    {
+        type liftDrag;
+        regions ( region0 );
+        patches ( walls );
+        porosity true;
+        nAveragingSteps 1;
+        outputRegionData true;
+        liftDirection ( 0.0 1.0 0.0 );
+        dragDirection ( 1.0 0.0 0.0 );
+        Uinf #include "windVector";
+        Pref 0.0;
+        rhoInf 1.205;
+        referenceArea 0.00142857;
+        referenceLength 1.0;              // approximate cord lenght
+        referencePoint ( 0.0 0.0 0.0 );
+        //referencePointCP ( 0.0 0.0 0.0 );  // uses center of mass by default
+        cOfMass true;                      // "false" by default
+        wheelbase 1.0;
+        writeControl timeStep;
+        writeInterval 1;
+        binData
+        {
+            nBins 100;
+            axis ( 1.0 0.0 0.0 );
+        }
+        functionObjectLibs ( "libforces.so" );
+    }
+    RAStat
+    {
+        timeStart       1;
+        executeControl  timeStep;
+        executeInterval 1;
+        writeControl    writeTime;
+        writeInterval   1;
+        type            runTimeControl;
+        conditions
+        {
+            RASCC
+            {
+                type                    reverseAnalysisStatistical;   	
+                //convergence condition type
+
+                functionObject          LD;				
+                //functionObject name that "fields" will be taken from
+
+                fields                  ( Cl );				
+                //fields within functionObject to be tracked by convergence criteria
+
+                minBox                  10;				
+                //min box data points to judge asymptotic convergence over and
+                //instances over solQual for non-asymptotic
+
+                stdTolerance            1e-06;				
+                //standard deviation tolerance for asymptotic convergence
+                //if you are sure you will be encoutering a periodic signal can be ignored
+                //otherwise will go to "machine" accuracy, the point at which you get high
+                //frequency switching behaviour or a perfectly flat line
+
+                solQualTolerance        0.99;				
+                //solution quality tolerance maximum value of 1 and is a measure of the
+                //amount of consistent data gathered based on standard deviation profile
+                //of gathered data and the gradient of best fit lines of subsets of the data.
+                //For anything other than a perfectly flat line it asymptotes to one, i.e.
+                //higher values result in larger average boxes.
+
+                fitTolerance            1e-04;				
+                //tolerance on the gradient of the line of best fit. Not required, however,
+                //can be useful if trying to achieve very aggressive stopping behaviour.
+
+                discardRate             0.5;				
+                //The rate at which points are discarded, this is relative to maximum solution
+                //quality achieved, i.e. 0.5 means if a maximum quality of 0.95 is achieved then
+                //any data at the end of the data set below a quality of 0.45 will be discarded.
+                //A larger value retains a larger "buffer" for the analysis.
+
+                vectorComp              true;			
+                vectorMag               false;
+                vectorSum               false;
+                //If one of the fields is a vector one or more of the above flags needs to
+                //be set to true for it to be analysed. component-wise, magnitude or the sum.		
+
+                resetOnRestart          false;				
+                //Flag to restart averaging process from the beginning on restart.
+            }
+        }
+    }
+}
+
+// ************************************************************************* //

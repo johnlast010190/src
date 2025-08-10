@@ -1,0 +1,150 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2016-2017 OpenCFD Ltd.
+    (c) 2011-2014 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "containers/Lists/UIndirectList/UIndirectList.H"
+#include "db/IOstreams/IOstreams/Ostream.H"
+#include "db/IOstreams/token/token.H"
+#include "primitives/contiguous/contiguous.H"
+
+// * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * * //
+
+template<class T>
+Foam::Ostream& Foam::UIndirectList<T>::writeList
+(
+    Ostream& os,
+    const label shortListLen
+) const
+{
+    const UIndirectList<T>& L = *this;
+
+    // Write list contents depending on data format
+    if (os.format() == IOstream::ASCII || !contiguous<T>())
+    {
+        // Can the contents be considered 'uniform' (ie, identical)?
+        bool uniform = (L.size() > 1 && contiguous<T>());
+        if (uniform)
+        {
+            forAll(L, i)
+            {
+                if (L[i] != L[0])
+                {
+                    uniform = false;
+                    break;
+                }
+            }
+        }
+
+        if (uniform)
+        {
+            // Write size and start delimiter
+            os << L.size() << token::BEGIN_BLOCK;
+
+            // Write contents
+            os << L[0];
+
+            // Write end delimiter
+            os << token::END_BLOCK;
+        }
+        else if
+        (
+            L.size() <= 1 || !shortListLen
+         || (L.size() <= shortListLen && contiguous<T>())
+        )
+        {
+            // Write size and start delimiter
+            os << L.size() << token::BEGIN_LIST;
+
+            // Write contents
+            forAll(L, i)
+            {
+                if (i) os << token::SPACE;
+                os << L[i];
+            }
+
+            // Write end delimiter
+            os << token::END_LIST;
+        }
+        else
+        {
+            // Write size and start delimiter
+            os << nl << L.size() << nl << token::BEGIN_LIST << nl;
+
+            // Write contents
+            forAll(L, i)
+            {
+                os << L[i] << nl;
+            }
+
+            // Write end delimiter
+            os << token::END_LIST << nl;
+        }
+    }
+    else
+    {
+        // Contents are binary and contiguous
+        os << nl << L.size() << nl;
+
+        if (L.size())
+        {
+            // This is annoying, and wasteful, but currently no alternative
+            List<T> lst = L();
+
+            // write(...) includes surrounding start/end delimiters
+            os.write
+            (
+                reinterpret_cast<const char*>(lst.cdata()),
+                lst.byteSize()
+            );
+        }
+        else
+        {
+            os << token::BEGIN_LIST << token::END_LIST << nl;
+        }
+    }
+
+    os.check(FUNCTION_NAME);
+    return os;
+}
+
+
+// * * * * * * * * * * * * * * * Ostream Operator *  * * * * * * * * * * * * //
+
+template<class T>
+Foam::Ostream& Foam::operator<<
+(
+    Foam::Ostream& os,
+    const Foam::UIndirectList<T>& L
+)
+{
+    return L.writeList(os, 10);
+}
+
+
+// ************************************************************************* //

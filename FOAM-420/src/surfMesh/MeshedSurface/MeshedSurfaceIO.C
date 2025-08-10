@@ -1,0 +1,122 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011 OpenFOAM Foundation
+    (c) 2016-2017 OpenCFD Ltd.
+
+\*---------------------------------------------------------------------------*/
+
+#include "MeshedSurface/MeshedSurface.H"
+#include "meshes/boundBox/boundBox.H"
+#include "meshes/meshShapes/traits/faceTraits.H"
+#include "db/IOstreams/IOstreams/Istream.H"
+#include "db/IOstreams/IOstreams/Ostream.H"
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+template<class Face>
+Foam::Istream& Foam::MeshedSurface<Face>::read(Istream& is)
+{
+    is  >> this->storedZones()
+        >> this->storedPoints()
+        >> this->storedFaces();
+
+    is.check(FUNCTION_NAME);
+    return is;
+}
+
+
+template<class Face>
+Foam::Ostream& Foam::MeshedSurface<Face>::write(Ostream& os) const
+{
+    os  << this->surfZones()
+        << this->points()
+        << this->surfFaces();
+
+    os.check(FUNCTION_NAME);
+    return os;
+}
+
+
+template<class Face>
+void Foam::MeshedSurface<Face>::writeStats(Ostream& os) const
+{
+    os  << "points      : " << this->points().size() << nl;
+    if (faceTraits<Face>::isTri())
+    {
+        os << "triangles   : " << this->size() << nl;
+    }
+    else
+    {
+        label nTri = 0;
+        label nQuad = 0;
+        forAll(*this, i)
+        {
+            const label n = this->operator[](i).size();
+
+            if (n == 3)
+            {
+                nTri++;
+            }
+            else if (n == 4)
+            {
+                nQuad++;
+            }
+        }
+
+        os  << "faces       : " << this->size()
+            << "  (tri:" << nTri << " quad:" << nQuad
+            << " poly:" << (this->size() - nTri - nQuad) << ")" << nl;
+    }
+
+    os  << "boundingBox : " << boundBox(this->points()) << endl;
+}
+
+
+// * * * * * * * * * * * * * * * IOstream Operators  * * * * * * * * * * * * //
+
+template<class Face>
+Foam::Istream& Foam::operator>>
+(
+    Foam::Istream& is,
+    Foam::MeshedSurface<Face>& surf
+)
+{
+    return surf.read(is);
+}
+
+
+template<class Face>
+Foam::Ostream& Foam::operator<<
+(
+    Foam::Ostream& os,
+    const Foam::MeshedSurface<Face>& surf
+)
+{
+    return surf.write(os);
+}
+
+
+// ************************************************************************* //

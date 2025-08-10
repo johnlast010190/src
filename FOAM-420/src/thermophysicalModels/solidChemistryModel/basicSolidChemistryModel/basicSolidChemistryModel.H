@@ -1,0 +1,202 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2013-2016 OpenFOAM Foundation
+
+Class
+    Foam::basicSolidChemistryModel
+
+Description
+    Chemistry model for solid thermodynamics
+
+SourceFiles
+    basicSolidChemistryModelI.H
+    basicSolidChemistryModel.C
+    newChemistrySolidModel.C
+
+\*---------------------------------------------------------------------------*/
+
+#ifndef basicSolidChemistryModel_H
+#define basicSolidChemistryModel_H
+
+#include "chemistryModel/basicChemistryModel/basicChemistryModel.H"
+#include "memory/autoPtr/autoPtr.H"
+#include "db/runTimeSelection/construction/runTimeSelectionTables.H"
+#include "solidReactionThermo/solidReactionThermo.H"
+#include "speciesTable/speciesTable.H"
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+
+// Forward declaration of classes
+class fvMesh;
+
+/*---------------------------------------------------------------------------*\
+                     class basicSolidChemistryModel Declaration
+\*---------------------------------------------------------------------------*/
+
+class basicSolidChemistryModel
+:
+    public basicChemistryModel
+{
+    // Private Member Functions
+
+        //- Construct as copy (not implemented)
+        basicSolidChemistryModel(const basicSolidChemistryModel&);
+
+        //- Disallow default bitwise assignment
+        void operator=(const basicSolidChemistryModel&);
+
+
+protected:
+
+    // Protected data
+
+        //- Solid thermo package
+        solidReactionThermo *solidThermoPtr_;
+
+
+public:
+
+    //- Runtime type information
+    TypeName("basicSolidChemistryModel");
+
+
+    //- Declare run-time constructor selection tables
+    declareRunTimeSelectionTable
+    (
+        autoPtr,
+        basicSolidChemistryModel,
+        objectRegistry,
+        (const objectRegistry& obr, const word& phaseName),
+        (obr, phaseName)
+    );
+
+
+    // Constructors
+
+        //- Construct from obr
+        basicSolidChemistryModel(const objectRegistry& obr, const word& phaseName);
+
+
+    //- Selector
+    static autoPtr<basicSolidChemistryModel> New
+    (
+        const objectRegistry& obr,
+        const word& phaseName=word::null
+    );
+
+
+    //- Destructor
+    virtual ~basicSolidChemistryModel();
+
+
+    // Member Functions
+
+        //- Return access to the solid thermo package
+        inline solidReactionThermo& solidThermo();
+
+        //- Return const access to the solid thermo package
+        inline const solidReactionThermo& solidThermo() const;
+
+        //- Return total gases mass source term [kg/m3/s]
+        virtual tmp<volScalarField::Internal> RRg() const = 0;
+
+        //- Return total solids mass source term [kg/m3/s]
+        virtual tmp<volScalarField::Internal> RRs() const = 0;
+
+        //- Return chemical source terms for solids [kg/m3/s]
+        virtual const volScalarField::Internal& RRs
+        (
+            const label i
+        ) const = 0;
+
+        //- Return chemical source terms for gases [kg/m3/s]
+        virtual const volScalarField::Internal& RRg
+        (
+            const label i
+        ) const = 0;
+
+        //- Returns the reaction rate of the speciei in reactionI
+        virtual tmp<volScalarField::Internal> calculateRR
+        (
+            const label reactionI,
+            const label speciei
+        ) const;
+
+        //- Returns the reaction rate of the speciei in reactionI
+        virtual tmp<volScalarField::Internal> calculateQdot
+        (
+            const label reactionI,
+            const label speciei
+        ) const;
+
+        //- Return sensible enthalpy for gas i [J/Kg]
+        virtual tmp<volScalarField> gasHs
+        (
+            const volScalarField& p,
+            const volScalarField& T,
+            const label i
+        ) const = 0;
+
+        //- Return net solid sensible enthalpy [J/Kg]
+        virtual tmp<DimensionedField<scalar, volMesh>> RRsHs() const = 0;
+
+        //- Return specie Table for gases
+        virtual const speciesTable& gasTable() const = 0;
+
+        //- Set reacting status of cell, celli
+        virtual void setCellReacting(const label celli, const bool active) = 0;
+
+        //- Calculates the reaction rates
+        virtual void calculate() = 0;
+
+        //- Return const access to the total source terms
+        virtual const volScalarField::Internal& RR
+        (
+            const label i
+        ) const;
+
+        //- Return non-const access to the total source terms
+        virtual volScalarField::Internal& RR(const label i);
+};
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace Foam
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#include "basicSolidChemistryModel/basicSolidChemistryModelI.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+#endif
+
+// ************************************************************************* //

@@ -1,0 +1,324 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2015 OpenFOAM Foundation
+    (c) 2015-2016 OpenCFD Ltd.
+    (c) 2010-2022 Esi Ltd.
+
+\*---------------------------------------------------------------------------*/
+
+#include "SpalartAllmarasIDDES.H"
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+namespace Foam
+{
+namespace LESModels
+{
+
+// * * * * * * * * * * * * Private Member Functions  * * * * * * * * * * * * //
+
+//NOTE: Currently Esi compressible model uses IDDESDelta2 whereas incompressible
+// has not been modified and still uses the standard IDDESDelta. I assume they should both
+// use IDDESDelta2 (as here)? If not, we must make it detect compressible/incompressible
+// and check accordingly that the right model was selected.
+template<class BasicTurbulenceModel>
+const IDDESDelta2& SpalartAllmarasIDDES<BasicTurbulenceModel>::setDelta() const
+{
+    if (!isA<IDDESDelta2>(this->delta_()))
+    {
+        FatalErrorInFunction
+            << "The delta function must be set to a " << IDDESDelta2::typeName
+            << " -based model" << exit(FatalError);
+    }
+
+    return refCast<const IDDESDelta2>(this->delta_());
+}
+
+
+template<class BasicTurbulenceModel>
+tmp<volScalarField> SpalartAllmarasIDDES<BasicTurbulenceModel>::alpha() const
+{
+    const volScalarField& y(wallDist::New(this->mesh_).y());
+    return max(0.25 - y/IDDESDelta_.hmax(), scalar(-5));
+}
+
+
+template<class BasicTurbulenceModel>
+tmp<volScalarField> SpalartAllmarasIDDES<BasicTurbulenceModel>::ft
+(
+    const volScalarField& magGradU
+) const
+{
+    return tanh(pow3(sqr(Ct_)*rd(this->nut_, magGradU)));
+}
+
+
+template<class BasicTurbulenceModel>
+tmp<volScalarField> SpalartAllmarasIDDES<BasicTurbulenceModel>::fl
+(
+    const volScalarField& magGradU
+) const
+{
+    return tanh(pow(sqr(Cl_)*rd(this->nu(), magGradU), 10));
+}
+
+
+template<class BasicTurbulenceModel>
+tmp<volScalarField> SpalartAllmarasIDDES<BasicTurbulenceModel>::rd
+(
+    const volScalarField& nur,
+    const volScalarField& magGradU
+) const
+{
+    const volScalarField& y(wallDist::New(this->mesh_).y());
+    tmp<volScalarField> tr
+    (
+        min
+        (
+            nur
+           /(
+                max
+                (
+                    magGradU,
+                    dimensionedScalar("SMALL", magGradU.dimensions(), SMALL)
+                )
+               *sqr(this->kappa_*y)
+            ),
+            scalar(10)
+        )
+    );
+    tr.ref().boundaryFieldRef().forceAssign(0.0);
+
+    return tr;
+}
+
+
+template<class BasicTurbulenceModel>
+void SpalartAllmarasIDDES<BasicTurbulenceModel>::correctAlphas()
+{
+    tmp<volScalarField> alpha(this->alpha());
+
+    tmp<volScalarField> expAlpha2(exp(sqr(alpha())));
+
+    fB_.reset
+    (
+        new volScalarField
+        (
+            IOobject
+            (
+                "fBIDDES",
+                this->mesh_.time().timeName(),
+                this->db_,
+                IOobject::NO_READ,
+                IOobject::NO_WRITE
+            ),
+            min(2*pow(expAlpha2(), -9.0), scalar(1))
+        )
+    );
+
+    fe1_.reset
+    (
+        new volScalarField
+        (
+            IOobject
+            (
+                "fe1IDDES",
+                this->mesh_.time().timeName(),
+                this->db_,
+                IOobject::NO_READ,
+                IOobject::NO_WRITE
+            ),
+            2*(pos0(alpha())*pow(expAlpha2(), -11.09)
+          + neg(alpha())*pow(expAlpha2(), -9.0))
+        )
+    );
+
+}
+
+
+template<class BasicTurbulenceModel>
+tmp<volScalarField> SpalartAllmarasIDDES<BasicTurbulenceModel>::fdt
+(
+    const volScalarField& magGradU
+) const
+{
+    return 1 - tanh(pow(Cdt1_*rd(this->nut_, magGradU), Cdt2_));
+}
+
+
+// * * * * * * * * * * * * Protected Member Functions  * * * * * * * * * * * //
+
+template<class BasicTurbulenceModel>
+tmp<volScalarField> SpalartAllmarasIDDES<BasicTurbulenceModel>::dTilda
+(
+    const volScalarField& chi,
+    const volScalarField& fv1,
+    const volTensorField& gradU
+) const
+{
+    const volScalarField magGradU(mag(gradU));
+    const volScalarField psi(this->psi(chi, fv1, gradU));
+
+    const volScalarField& lRAS(wallDist::New(this->mesh_).y());
+    const volScalarField lLES(psi*this->CDES_*this->delta());
+
+    tmp<volScalarField> fe2 = 1 - max(ft(magGradU), fl(magGradU));
+    tmp<volScalarField> fe = max(fe1_() - 1, scalar(0))*psi*fe2;
+
+    const volScalarField fdTilda(max(1 - fdt(magGradU), fB_()));
+
+    // Simplified formulation from Gritskevich et al. paper (2011) where fe = 0
+    // return max
+    // (
+    //     fdTilda*lRAS + (1 - fdTilda)*lLES,
+    //     dimensionedScalar("SMALL", dimLength, SMALL)
+    // );
+
+    // Original formulation from Shur et al. paper (2008)
+    return max
+    (
+        fdTilda*(1 + fe)*lRAS + (1 - fdTilda)*lLES,
+        dimensionedScalar("SMALL", dimLength, SMALL) // this should be relative
+    );
+}
+
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+template<class BasicTurbulenceModel>
+SpalartAllmarasIDDES<BasicTurbulenceModel>::SpalartAllmarasIDDES
+(
+    const alphaField& alpha,
+    const rhoField& rho,
+    const volVectorField& U,
+    const surfaceScalarField& alphaRhoPhi,
+    const surfaceScalarField& phi,
+    const transportModel& transport,
+    const word& propertiesName,
+    const word& type
+)
+:
+    SpalartAllmarasDES<BasicTurbulenceModel>
+    (
+        alpha,
+        rho,
+        U,
+        alphaRhoPhi,
+        phi,
+        transport,
+        propertiesName,
+        type
+    ),
+
+    Cdt1_
+    (
+        dimensioned<scalar>::lookupOrAddToDict
+        (
+            "Cdt1",
+            this->coeffDict_,
+            8
+        )
+    ),
+    Cdt2_
+    (
+        dimensioned<scalar>::lookupOrAddToDict
+        (
+            "Cdt2",
+            this->coeffDict_,
+            3
+        )
+    ),
+    Cl_
+    (
+        dimensioned<scalar>::lookupOrAddToDict
+        (
+            "Cl",
+            this->coeffDict_,
+            3.55
+        )
+    ),
+    Ct_
+    (
+        dimensioned<scalar>::lookupOrAddToDict
+        (
+            "Ct",
+            this->coeffDict_,
+            1.63
+        )
+    ),
+    IDDESDelta_(setDelta()),
+    fB_(),
+    fe1_()
+{
+    correctAlphas();
+
+    if (type == typeName)
+    {
+        this->printCoeffs(type);
+    }
+}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+
+template<class BasicTurbulenceModel>
+void SpalartAllmarasIDDES<BasicTurbulenceModel>::correct()
+{
+    if (this->mesh_.moving())
+    {
+        correctAlphas();
+    }
+
+    SpalartAllmarasDES<BasicTurbulenceModel>::correct();
+}
+
+
+template<class BasicTurbulenceModel>
+bool SpalartAllmarasIDDES<BasicTurbulenceModel>::read()
+{
+    if (SpalartAllmarasDES<BasicTurbulenceModel>::read())
+    {
+        Cdt1_.readIfPresent(this->coeffDict());
+        Cdt2_.readIfPresent(this->coeffDict());
+        Cl_.readIfPresent(this->coeffDict());
+        Ct_.readIfPresent(this->coeffDict());
+
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+} // End namespace LESModels
+} // End namespace Foam
+
+// ************************************************************************* //

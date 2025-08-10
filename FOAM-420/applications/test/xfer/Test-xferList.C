@@ -1,0 +1,195 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2016 OpenFOAM Foundation
+
+Application
+
+Description
+
+\*---------------------------------------------------------------------------*/
+
+#include "include/OSspecific.H"
+
+#include "db/IOstreams/IOstreams.H"
+#include "db/IOstreams/StringStreams/IStringStream.H"
+#include "primitives/ints/lists/labelList.H"
+#include "containers/Lists/DynamicList/DynamicList.H"
+#include "meshes/meshShapes/face/face.H"
+#include "meshes/primitiveShapes/point/pointField.H"
+#include "fields/Fields/DynamicField/DynamicField.H"
+
+using namespace Foam;
+
+
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+//  Main program:
+
+int main(int argc, char *argv[])
+{
+    List<label> lstA(10);
+    List<label> lstC
+    {
+        1, 2, 3, 4
+    };
+
+    forAll(lstA, i)
+    {
+        lstA[i] = i;
+    }
+
+    Info<< "lstA: " << lstA << endl;
+    Info<< "lstC: " << lstC << endl;
+
+    Xfer<List<label>> xA = xferMove(lstA);
+    Xfer<List<label>> xB;
+
+    List<label> lstB( xA );
+
+    Info<< "xA: " << xA() << endl;
+    Info<< "xB: " << xB() << endl;
+    Info<< "lstA: " << lstA << endl;
+    Info<< "lstB: " << lstB << endl;
+    Info<< "lstC: " << lstC << endl;
+
+    xA = lstB;
+
+    Info<< "xA: " << xA() << endl;
+    Info<< "xB: " << xB() << endl;
+    Info<< "lstA: " << lstA << endl;
+    Info<< "lstB: " << lstB << endl;
+    Info<< "lstC: " << lstC << endl;
+
+    xB = xA;
+
+    List<label> lstD(xferCopy(lstC));
+    List<label> lstE(xferMove(lstC));
+
+    // this must be empty
+    List<label> lstF = xferCopy(lstC);
+
+    Info<< "xA: " << xA() << endl;
+    Info<< "xB: " << xB() << endl;
+    Info<< "lstA: " << lstA << endl;
+    Info<< "lstB: " << lstB << endl;
+    Info<< "lstC: " << lstC << endl;
+    Info<< "lstD: " << lstD << endl;
+    Info<< "lstE: " << lstE << endl;
+    Info<< "lstF: " << lstF << endl;
+
+    Info<< "xB[" << xB->size() << "]\n";
+
+    // clear the underlying List
+    xB->clear();
+
+    Info<< "xB[" << xB->size() << "]\n";
+
+    DynamicList<label> dl(10);
+    for (label i = 0; i < 5; ++i)
+    {
+        dl.append(i);
+    }
+
+    face f1(dl);
+    face f2(xferCopy<labelList>(dl));
+
+    Info<< "dl[" << dl.size() << "/" << dl.capacity() << "] " << dl << endl;
+    Info<< "f1: " << f1 << endl;
+    Info<< "f2: " << f2 << endl;
+
+    // add some more labels
+    for (label i = 5; i < 8; ++i)
+    {
+        dl.append(i);
+    }
+
+    // note: xfer() method returns a plain labelList
+    face f3(dl.xfer());
+    Info<< "dl[" << dl.size() << "/" << dl.capacity() << "] " << dl << endl;
+    Info<< "f3: " << f3 << endl;
+
+    Info<<"\nflip faces:" << endl;
+    f1.flip();
+    f3.flip();
+    Info<< "f1: " << f1 << endl;
+    Info<< "f3: " << f3 << endl;
+
+
+    {
+        Info<<"\nTest xfer with fields:" << endl;
+        List<point> list1
+        {
+            { 0, 1, 2 },
+            { 3, 4, 5 },
+            { 6, 7, 8 },
+            { 9, 10, 11 },
+        };
+
+        // Field from Xfer<List>
+        pointField field1(list1.xfer());
+        Info<<nl
+            << "xfer construct from List" << nl
+            <<"input (list) = " << list1 << nl
+            <<"output (field) = " << field1 << nl;
+
+
+        // Field from Xfer<List> ... again
+        pointField field2(field1.xfer());
+        Info<<nl
+            <<"xfer construct from Field (as List): " << nl
+            <<"input (field) = " << field1 << nl
+            <<"output (field) = " << field2 << nl;
+
+
+        // Field from Xfer<Field>
+        pointField field3(xferMove(field2));
+        Info<<nl
+            <<"xfer construct from Field (as Field): " << nl
+            <<"input (field) = " << field2 << nl
+            <<"output (field) = " << field3 << nl;
+
+
+        // Field from Xfer<Field> .. again
+        pointField field4(xferCopy(field3));
+        Info<<nl
+            <<"xfer copy construct from Field (as Field): " << nl
+            <<"input (field) = " << field3 << nl
+            <<"output (field) = " << field4 << nl;
+
+
+        DynamicField<point> dyfield1(xferCopy(field4));
+        Info<<nl
+            <<"xfer copy construct from Field (as Field): " << nl
+            <<"input (field) = " << field4 << nl
+            <<"output (dyn-field) = " << dyfield1 << nl;
+
+    }
+
+    return 0;
+}
+
+
+// ************************************************************************* //

@@ -1,0 +1,372 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2011-2016 OpenFOAM Foundation
+    (c) 2016-2017 OpenCFD Ltd.
+
+\*---------------------------------------------------------------------------*/
+
+#include "sampledSurface/isoSurface/sampledIsoSurfaceCell.H"
+#include "db/dictionary/dictionary.H"
+#include "fields/volFields/volFields.H"
+#include "interpolation/volPointInterpolation/volPointInterpolation.H"
+#include "db/runTimeSelection/construction/addToRunTimeSelectionTable.H"
+#include "fvMesh/fvMesh.H"
+#include "surface/isoSurface/isoSurfaceCell.H"
+
+// * * * * * * * * * * * * * * Static Data Members * * * * * * * * * * * * * //
+
+namespace Foam
+{
+    defineTypeNameAndDebug(sampledIsoSurfaceCell, 0);
+    addNamedToRunTimeSelectionTable
+    (
+        sampledSurface,
+        sampledIsoSurfaceCell,
+        word,
+        isoSurfaceCell
+    );
+}
+
+// * * * * * * * * * * * * * Private Member Functions  * * * * * * * * * * * //
+
+bool Foam::sampledIsoSurfaceCell::updateGeometry() const
+{
+    const fvMesh& fvm = static_cast<const fvMesh&>(mesh());
+
+    // no update needed
+    if (fvm.time().timeIndex() == prevTimeIndex_)
+    {
+        return false;
+    }
+
+    prevTimeIndex_ = fvm.time().timeIndex();
+
+    // Clear derived data
+    sampledSurface::clearGeom();
+
+    // Optionally read volScalarField
+    autoPtr<volScalarField> readFieldPtr_;
+
+    // 1. see if field in database
+    // 2. see if field can be read
+    const volScalarField* cellFldPtr = nullptr;
+    if (fvm.foundObject<volScalarField>(isoField_))
+    {
+        if (debug)
+        {
+            InfoInFunction << "Lookup " << isoField_ << endl;
+        }
+
+        cellFldPtr = &fvm.lookupObject<volScalarField>(isoField_);
+    }
+    else
+    {
+        // Bit of a hack. Read field and store.
+
+        if (debug)
+        {
+            InfoInFunction
+                << "Reading " << isoField_
+                << " from time " <<fvm.time().timeName()
+                << endl;
+        }
+
+        readFieldPtr_.reset
+        (
+            new volScalarField
+            (
+                IOobject
+                (
+                    isoField_,
+                    fvm.time().timeName(),
+                    fvm,
+                    IOobject::MUST_READ,
+                    IOobject::NO_WRITE,
+                    false
+                ),
+                fvm
+            )
+        );
+
+        cellFldPtr = readFieldPtr_.operator->();
+    }
+    const volScalarField& cellFld = *cellFldPtr;
+
+    tmp<pointScalarField> pointFld
+    (
+        volPointInterpolation::New(fvm).interpolate(cellFld)
+    );
+
+    if (average_)
+    {
+        //- From point field and interpolated cell.
+        scalarField cellAvg(fvm.nCells(), scalar(0.0));
+        labelField nPointCells(fvm.nCells(), 0);
+        {
+            for (label pointi = 0; pointi < fvm.nPoints(); pointi++)
+            {
+                const labelList& pCells = fvm.pointCells(pointi);
+
+                forAll(pCells, i)
+                {
+                    label celli = pCells[i];
+
+                    cellAvg[celli] += pointFld().primitiveField()[pointi];
+                    nPointCells[celli]++;
+                }
+            }
+        }
+        forAll(cellAvg, celli)
+        {
+            cellAvg[celli] /= nPointCells[celli];
+        }
+
+        isoSurfaceCell iso
+        (
+            fvm,
+            cellAvg,
+            pointFld().primitiveField(),
+            isoVal_,
+            regularise_,
+            bounds_
+        );
+
+        const_cast<sampledIsoSurfaceCell&>
+        (
+            *this
+        ).transfer(static_cast<meshedSurface&>(iso));
+        meshCells_ = iso.meshCells();
+    }
+    else
+    {
+        //- Direct from cell field and point field. Gives bad continuity.
+        isoSurfaceCell iso
+        (
+            fvm,
+            cellFld.primitiveField(),
+            pointFld().primitiveField(),
+            isoVal_,
+            regularise_,
+            bounds_
+        );
+
+        const_cast<sampledIsoSurfaceCell&>
+        (
+            *this
+        ).transfer(static_cast<meshedSurface&>(iso));
+        meshCells_ = iso.meshCells();
+    }
+
+
+    if (debug)
+    {
+        Pout<< "sampledIsoSurfaceCell::updateGeometry() : constructed iso:"
+            << nl
+            << "    regularise     : " << regularise_ << nl
+            << "    average        : " << average_ << nl
+            << "    isoField       : " << isoField_ << nl
+            << "    isoValue       : " << isoVal_ << nl
+            << "    bounds         : " << bounds_ << nl
+            << "    points         : " << points().size() << nl
+            << "    faces          : " << MeshStorage::size() << nl
+            << "    cut cells      : " << meshCells_.size() << endl;
+    }
+
+    return true;
+}
+
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+Foam::sampledIsoSurfaceCell::sampledIsoSurfaceCell
+(
+    const word& name,
+    const polyMesh& mesh,
+    const dictionary& dict
+)
+:
+    sampledSurface(name, mesh, dict),
+    MeshStorage(),
+    isoField_(dict.lookup("isoField")),
+    isoVal_(readScalar(dict.lookup("isoValue"))),
+    bounds_(dict.lookupOrDefault("bounds", boundBox::invertedBox)),
+    regularise_(dict.lookupOrDefault("regularise", true)),
+    average_(dict.lookupOrDefault("average", true)),
+    zoneKey_(keyType::null),
+    prevTimeIndex_(-1),
+    meshCells_(0)
+{}
+
+
+// * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * * //
+
+Foam::sampledIsoSurfaceCell::~sampledIsoSurfaceCell()
+{}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+bool Foam::sampledIsoSurfaceCell::needsUpdate() const
+{
+    const fvMesh& fvm = static_cast<const fvMesh&>(mesh());
+
+    return fvm.time().timeIndex() != prevTimeIndex_;
+}
+
+
+bool Foam::sampledIsoSurfaceCell::expire()
+{
+    // Clear derived data
+    sampledSurface::clearGeom();
+
+    // already marked as expired
+    if (prevTimeIndex_ == -1)
+    {
+        return false;
+    }
+
+    // force update
+    prevTimeIndex_ = -1;
+    return true;
+}
+
+
+bool Foam::sampledIsoSurfaceCell::update()
+{
+    return updateGeometry();
+}
+
+
+Foam::tmp<Foam::scalarField>
+Foam::sampledIsoSurfaceCell::sample
+(
+    const volScalarField& vField
+) const
+{
+    return sampleField(vField);
+}
+
+
+Foam::tmp<Foam::vectorField>
+Foam::sampledIsoSurfaceCell::sample
+(
+    const volVectorField& vField
+) const
+{
+    return sampleField(vField);
+}
+
+
+Foam::tmp<Foam::sphericalTensorField>
+Foam::sampledIsoSurfaceCell::sample
+(
+    const volSphericalTensorField& vField
+) const
+{
+    return sampleField(vField);
+}
+
+
+Foam::tmp<Foam::symmTensorField>
+Foam::sampledIsoSurfaceCell::sample
+(
+    const volSymmTensorField& vField
+) const
+{
+    return sampleField(vField);
+}
+
+
+Foam::tmp<Foam::tensorField>
+Foam::sampledIsoSurfaceCell::sample
+(
+    const volTensorField& vField
+) const
+{
+    return sampleField(vField);
+}
+
+
+Foam::tmp<Foam::scalarField>
+Foam::sampledIsoSurfaceCell::interpolate
+(
+    const interpolation<scalar>& interpolator
+) const
+{
+    return interpolateField(interpolator);
+}
+
+
+Foam::tmp<Foam::vectorField>
+Foam::sampledIsoSurfaceCell::interpolate
+(
+    const interpolation<vector>& interpolator
+) const
+{
+    return interpolateField(interpolator);
+}
+
+Foam::tmp<Foam::sphericalTensorField>
+Foam::sampledIsoSurfaceCell::interpolate
+(
+    const interpolation<sphericalTensor>& interpolator
+) const
+{
+    return interpolateField(interpolator);
+}
+
+
+Foam::tmp<Foam::symmTensorField>
+Foam::sampledIsoSurfaceCell::interpolate
+(
+    const interpolation<symmTensor>& interpolator
+) const
+{
+    return interpolateField(interpolator);
+}
+
+
+Foam::tmp<Foam::tensorField>
+Foam::sampledIsoSurfaceCell::interpolate
+(
+    const interpolation<tensor>& interpolator
+) const
+{
+    return interpolateField(interpolator);
+}
+
+
+void Foam::sampledIsoSurfaceCell::print(Ostream& os) const
+{
+    os  << "sampledIsoSurfaceCell: " << name() << " :"
+        << "  field:" << isoField_
+        << "  value:" << isoVal_;
+        //<< "  faces:" << faces().size()   // possibly no geom yet
+        //<< "  points:" << points().size();
+}
+
+
+// ************************************************************************* //

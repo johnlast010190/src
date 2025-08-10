@@ -1,0 +1,325 @@
+/*---------------------------------------------------------------------------*\
+|       o        |
+|    o     o     |  FOAM (R) : Open-source CFD for Enterprise
+|   o   O   o    |  Version : 4.2.0
+|    o     o     |  ESI Ltd. <http://esi.com/>
+|       o        |
+\*---------------------------------------------------------------------------
+License
+    This file is part of FOAMcore.
+    FOAMcore is based on OpenFOAM (R) <http://www.openfoam.org/>.
+
+    FOAMcore is free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    FOAMcore is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+    for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with FOAMcore.  If not, see <http://www.gnu.org/licenses/>.
+
+Copyright
+    (c) 2016 OpenFOAM Foundation
+
+\*---------------------------------------------------------------------------*/
+
+#include "db/error/error.H"
+#include <typeinfo>
+
+// * * * * * * * * * * * * * Static Member Functions * * * * * * * * * * * * //
+
+template<class T>
+template<class... Args>
+inline Foam::tmpNrc<T> Foam::tmpNrc<T>::New(Args&&... args)
+{
+    return tmpNrc<T>(new T(std::forward<Args>(args)...));
+}
+
+
+template<class T>
+template<class U, class... Args>
+inline Foam::tmpNrc<T> Foam::tmpNrc<T>::NewFrom(Args&&... args)
+{
+    return tmpNrc<T>(new U(std::forward<Args>(args)...));
+}
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+template<class T>
+inline Foam::tmpNrc<T>::tmpNrc(T* tPtr)
+:
+    type_(TMP),
+    ptr_(tPtr)
+{}
+
+
+template<class T>
+inline Foam::tmpNrc<T>::tmpNrc(const T& tRef)
+:
+    type_(CONST_REF),
+    ptr_(const_cast<T*>(&tRef))
+{}
+
+
+template<class T>
+inline Foam::tmpNrc<T>::tmpNrc(const tmpNrc<T>& t)
+:
+    type_(t.type_),
+    ptr_(t.ptr_)
+{
+    if (isTmp())
+    {
+        if (ptr_)
+        {
+            t.type_ = CONST_REF;
+        }
+        else
+        {
+            FatalErrorInFunction
+                << "Attempted copy of a deallocated " << typeName()
+                << abort(FatalError);
+        }
+    }
+}
+
+
+template<class T>
+inline Foam::tmpNrc<T>::tmpNrc(const tmpNrc<T>& t, bool allowTransfer)
+:
+    type_(t.type_),
+    ptr_(t.ptr_)
+{
+    if (isTmp())
+    {
+        if (ptr_)
+        {
+            if (allowTransfer)
+            {
+                t.ptr_ = 0;
+            }
+            else
+            {
+                t.type_ = CONST_REF;
+            }
+        }
+        else
+        {
+            FatalErrorInFunction
+                << "Attempted copy of a deallocated " << typeName()
+                << abort(FatalError);
+        }
+    }
+}
+
+
+template<class T>
+inline Foam::tmpNrc<T>::~tmpNrc()
+{
+    clear();
+}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+template<class T>
+inline bool Foam::tmpNrc<T>::isTmp() const
+{
+    return type_ == TMP;
+}
+
+
+template<class T>
+inline bool Foam::tmpNrc<T>::empty() const
+{
+    return (isTmp() && !ptr_);
+}
+
+
+template<class T>
+inline bool Foam::tmpNrc<T>::valid() const
+{
+    return (!isTmp() || (isTmp() && ptr_));
+}
+
+
+template<class T>
+inline Foam::word Foam::tmpNrc<T>::typeName() const
+{
+    return "tmpNrc<" + word(typeid(T).name()) + '>';
+}
+
+
+template<class T>
+inline T& Foam::tmpNrc<T>::ref()
+{
+    if (isTmp())
+    {
+        if (!ptr_)
+        {
+            FatalErrorInFunction
+                << typeName() << " deallocated"
+                << abort(FatalError);
+        }
+    }
+    else
+    {
+        FatalErrorInFunction
+            << "Attempt to acquire non-const reference to const object"
+            << " from a " << typeName()
+            << abort(FatalError);
+    }
+
+    return *ptr_;
+}
+
+
+template<class T>
+inline T* Foam::tmpNrc<T>::ptr() const
+{
+    if (isTmp())
+    {
+        if (!ptr_)
+        {
+            FatalErrorInFunction
+                << typeName() << " deallocated"
+                << abort(FatalError);
+        }
+
+        T* ptr = ptr_;
+        ptr_ = 0;
+
+        return ptr;
+    }
+    else
+    {
+        return new T(*ptr_);
+    }
+}
+
+
+template<class T>
+inline void Foam::tmpNrc<T>::clear() const
+{
+    if (isTmp() && ptr_)
+    {
+        delete ptr_;
+        ptr_ = 0;
+    }
+}
+
+
+// * * * * * * * * * * * * * * * Member Operators  * * * * * * * * * * * * * //
+
+template<class T>
+inline const T& Foam::tmpNrc<T>::operator()() const
+{
+    if (isTmp())
+    {
+        if (!ptr_)
+        {
+            FatalErrorInFunction
+                << typeName() << " deallocated"
+                << abort(FatalError);
+        }
+    }
+
+    // Return const reference
+    return *ptr_;
+}
+
+
+template<class T>
+inline Foam::tmpNrc<T>::operator const T&() const
+{
+    return operator()();
+}
+
+
+template<class T>
+inline T* Foam::tmpNrc<T>::operator->()
+{
+    if (isTmp())
+    {
+        if (!ptr_)
+        {
+            FatalErrorInFunction
+                << typeName() << " deallocated"
+                << abort(FatalError);
+        }
+    }
+    else
+    {
+        FatalErrorInFunction
+            << "Attempt to cast const object to non-const for a " << typeName()
+            << abort(FatalError);
+    }
+
+    return ptr_;
+}
+
+
+template<class T>
+inline const T* Foam::tmpNrc<T>::operator->() const
+{
+    if (isTmp() && !ptr_)
+    {
+        FatalErrorInFunction
+            << typeName() << " deallocated"
+            << abort(FatalError);
+    }
+
+    return ptr_;
+}
+
+
+template<class T>
+inline void Foam::tmpNrc<T>::operator=(T* tPtr)
+{
+    clear();
+
+    if (!tPtr)
+    {
+        FatalErrorInFunction
+            << "Attempted copy of a deallocated " << typeName()
+            << abort(FatalError);
+    }
+
+    type_ = TMP;
+    ptr_ = tPtr;
+}
+
+
+template<class T>
+inline void Foam::tmpNrc<T>::operator=(const tmpNrc<T>& t)
+{
+    clear();
+
+    if (t.isTmp())
+    {
+        type_ = TMP;
+
+        if (!t.ptr_)
+        {
+            FatalErrorInFunction
+                << "Attempted assignment to a deallocated " << typeName()
+                << abort(FatalError);
+        }
+
+        ptr_ = t.ptr_;
+        t.ptr_ = 0;
+    }
+    else
+    {
+        FatalErrorInFunction
+            << "Attempted assignment to a const reference to an object"
+            << " of type " << typeid(T).name()
+            << abort(FatalError);
+    }
+}
+
+
+// ************************************************************************* //
